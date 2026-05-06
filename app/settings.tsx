@@ -1,24 +1,42 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../src/theme';
 
 export default function Settings() {
   const router = useRouter();
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.subtitle}>SCRUM-29 will build this</Text>
+  const { theme } = useTheme();
 
-      <TouchableOpacity style={styles.button} onPress={() => router.back()}>
-        <Text style={styles.buttonText}>← Back</Text>
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background, padding: theme.spacing.lg }]}>
+      <Text style={[styles.title, { color: theme.colors.primary, fontSize: theme.fontSize.display }]}>
+        Settings
+      </Text>
+      <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm }]}>
+        SCRUM-29 will build this
+      </Text>
+
+      <TouchableOpacity
+        style={[
+          styles.button,
+          {
+            backgroundColor: theme.colors.primary,
+            borderRadius: theme.radius.lg,
+            paddingHorizontal: theme.spacing.xl,
+            paddingVertical: theme.spacing.md,
+          },
+        ]}
+        onPress={() => router.back()}
+      >
+        <Text style={[styles.buttonText, { color: theme.colors.textOnPrimary }]}>← Back</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FBF5E5', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { fontSize: 36, fontWeight: '700', color: '#1D3557', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#6B7280', marginBottom: 40 },
-  button: { backgroundColor: '#1D3557', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
-  buttonText: { color: '#FBF5E5', fontSize: 16, fontWeight: '600' },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  title: { fontWeight: '700', marginBottom: 8 },
+  subtitle: { marginBottom: 40 },
+  button: {},
+  buttonText: { fontSize: 16, fontWeight: '600' },
 });
