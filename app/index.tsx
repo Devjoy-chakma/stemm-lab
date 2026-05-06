@@ -1,21 +1,36 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useTheme } from '../src/theme';
 
 export default function Welcome() {
   const router = useRouter();
+  const { theme } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
-      <Text style={styles.title}>STEMMLab</Text>
-      <Text style={styles.subtitle}>Welcome screen (SCRUM-7 stub)</Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+
+      <Text style={[styles.title, { color: theme.colors.primary, fontSize: theme.fontSize.hero }]}>
+        STEMMLab
+      </Text>
+      <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontSize: theme.fontSize.md }]}>
+        Welcome screen (SCRUM-7 stub)
+      </Text>
 
       <TouchableOpacity
-        style={styles.button}
+        style={[
+          styles.button,
+          {
+            backgroundColor: theme.colors.primary,
+            borderRadius: theme.radius.lg,
+            paddingHorizontal: theme.spacing.xl,
+            paddingVertical: theme.spacing.md,
+          },
+        ]}
         onPress={() => router.push('/sign-in')}
       >
-        <Text style={styles.buttonText}>Continue →</Text>
+        <Text style={[styles.buttonText, { color: theme.colors.textOnPrimary }]}>Continue →</Text>
       </TouchableOpacity>
     </View>
   );
@@ -24,30 +39,19 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FBF5E5',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   title: {
-    fontSize: 48,
     fontWeight: '700',
-    color: '#1D3557',
     marginBottom: 12,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
     marginBottom: 48,
   },
-  button: {
-    backgroundColor: '#1D3557',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
+  button: {},
   buttonText: {
-    color: '#FBF5E5',
     fontSize: 16,
     fontWeight: '600',
   },
