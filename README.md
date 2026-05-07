@@ -58,5 +58,3 @@ Work happens on feature branches named `feature/SCRUM-{ticket-number}-{short-des
 ## Status
 
 Sprint 1 in progress. See Jira board for current work.
-
-## Testing Push code
