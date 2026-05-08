@@ -29,7 +29,18 @@
     },
     "plugins": [
       "expo-router",
+<<<<<<< HEAD
       "expo-sqlite"
+=======
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "STEMMLab needs camera access to record your parachute drops for analysis.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+>>>>>>> ecf364eb653b27f66822cd69a6f63e819da5d643
     ]
   }
 }
