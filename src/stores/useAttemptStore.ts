@@ -1,36 +1,37 @@
 import { create } from 'zustand';
 
-// What an in-progress attempt looks like
 export interface Attempt {
-  attempt_id: string;       // local UUID
+  attempt_id: string;
   team_id: string;
-  activity_id: string;      // 'parachute', 'sound', etc.
-  started_at: number;       // Date.now() when Run tab opened
+  activity_id: string;
+  started_at: number;
   finished_at: number | null;
   score: number | null;
-  raw_data: Record<string, any>;  // activity-specific data
+  raw_data: Record<string, any>;
   write_up: string;
 }
 
 interface AttemptStore {
-  // state
   current: Attempt | null;
+  history: Attempt[]; // completed attempts in this session
 
-  // actions
   startAttempt: (team_id: string, activity_id: string) => void;
   updateRawData: (data: Record<string, any>) => void;
   setScore: (score: number) => void;
   setWriteUp: (text: string) => void;
   finishAttempt: () => void;
   clearAttempt: () => void;
+
+  // Selectors
+  getPreviousAttemptForActivity: (activity_id: string) => Attempt | null;
 }
 
-// Helper to make a unique-ish ID without an extra library
 const makeId = () =>
   `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-export const useAttemptStore = create<AttemptStore>((set) => ({
+export const useAttemptStore = create<AttemptStore>((set, get) => ({
   current: null,
+  history: [],
 
   startAttempt: (team_id, activity_id) =>
     set({
@@ -49,7 +50,12 @@ export const useAttemptStore = create<AttemptStore>((set) => ({
   updateRawData: (data) =>
     set((state) =>
       state.current
-        ? { current: { ...state.current, raw_data: { ...state.current.raw_data, ...data } } }
+        ? {
+            current: {
+              ...state.current,
+              raw_data: { ...state.current.raw_data, ...data },
+            },
+          }
         : state
     ),
 
@@ -64,11 +70,32 @@ export const useAttemptStore = create<AttemptStore>((set) => ({
     ),
 
   finishAttempt: () =>
-    set((state) =>
-      state.current
-        ? { current: { ...state.current, finished_at: Date.now() } }
-        : state
-    ),
+    set((state) => {
+      if (!state.current) return state;
+      const finished: Attempt = {
+        ...state.current,
+        finished_at: Date.now(),
+      };
+      return {
+        current: finished,
+        history: [...state.history, finished],
+      };
+    }),
 
   clearAttempt: () => set({ current: null }),
+
+  // Returns the most recent FINISHED attempt for this activity,
+  // EXCLUDING the current one if it's also for the same activity.
+  getPreviousAttemptForActivity: (activity_id) => {
+    const { history, current } = get();
+    const previous = history
+      .filter(
+        (a) =>
+          a.activity_id === activity_id &&
+          a.finished_at !== null &&
+          a.attempt_id !== current?.attempt_id
+      )
+      .sort((a, b) => (b.finished_at ?? 0) - (a.finished_at ?? 0));
+    return previous[0] ?? null;
+  },
 }));
