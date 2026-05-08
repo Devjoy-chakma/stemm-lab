@@ -16,7 +16,20 @@ function generateDiscriminator() {
 
 export async function createTeamSession(input: CreateTeamInput) {
   const db = await getDatabase();
+
   const now = new Date().toISOString();
+
+  await db.runAsync(
+    `INSERT OR IGNORE INTO users (
+    user_id,
+    firebase_uid,
+    email,
+    created_at,
+    last_login_at
+  ) VALUES (?, ?, ?, ?, ?)`,
+    [1, "local-dev-user", "local@stemmlab.dev", now, now]
+  );
+
   const discriminator = generateDiscriminator();
 
   const result = await db.runAsync(
