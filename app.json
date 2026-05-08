@@ -29,9 +29,7 @@
     },
     "plugins": [
       "expo-router",
-<<<<<<< HEAD
-      "expo-sqlite"
-=======
+      "expo-sqlite",
       [
         "expo-camera",
         {
@@ -40,7 +38,6 @@
           "recordAudioAndroid": false
         }
       ]
->>>>>>> ecf364eb653b27f66822cd69a6f63e819da5d643
     ]
   }
 }
