@@ -36,7 +36,13 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      [
+    "expo-audio",
+    {
+      "microphonePermission": "STEMM-Lab needs microphone access to measure noise pollution."
+    }
+  ]
     ]
   }
 }
