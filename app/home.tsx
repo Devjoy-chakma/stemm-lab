@@ -5,7 +5,7 @@ import { useTheme } from '../src/theme';
 const ACTIVITIES = [
   { id: 'parachute', name: 'Parachute Drop' },
   { id: 'sound', name: 'Sound Pollution Hunter' },
-  { id: 'fan', name: 'Hand Fan Challenge' },
+  { id: 'hand-fan', name: 'Hand Fan Challenge' },
   { id: 'earthquake', name: 'Earthquake Structure' },
   { id: 'human-perf', name: 'Human Performance' },
   { id: 'reaction', name: 'Reaction Board' },
