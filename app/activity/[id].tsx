@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import ParachuteDrop from '../../src/activities/ParachuteDrop';
 import HandFan from '../../src/activities/HandFan';
 import { useTheme } from '../../src/theme';
+import SoundPollution from '../../src/activities/SoundPollution';
 
 export default function ActivityRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -11,6 +12,8 @@ export default function ActivityRoute() {
   switch (id) {
     case 'parachute':
       return <ParachuteDrop />;
+    case 'sound':
+      return <SoundPollution />;
     case 'hand-fan':
       return <HandFan />;
     default:
