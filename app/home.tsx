@@ -1,15 +1,14 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../src/theme';
 
 const ACTIVITIES = [
-  { id: 'parachute', name: 'Parachute Drop' },
-  { id: 'sound', name: 'Sound Pollution Hunter' },
-  { id: 'hand-fan', name: 'Hand Fan Challenge' },
-  { id: 'earthquake', name: 'Earthquake Structure' },
-  { id: 'human-perf', name: 'Human Performance' },
-  { id: 'reaction', name: 'Reaction Board' },
-  { id: 'breathing', name: 'Breathing Pace' },
+  { id: "parachute", name: "Parachute Drop", icon: "🪂" },
+  { id: "sound", name: "Sound Pollution", icon: "🔊" },
+  { id: "hand-fan", name: "Hand Fan", icon: "🪭" },
+  { id: "human-perf", name: "Human Performance", icon: "🏃" },
+  { id: "reaction", name: "Reaction Board", icon: "⚡" },
+  { id: "breathing", name: "Breathing Pace", icon: "🫁" },
 ];
 
 export default function Home() {
