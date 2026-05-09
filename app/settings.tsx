@@ -4,7 +4,21 @@ import { useTheme } from "../src/theme";
 
 export default function Settings() {
   const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, isDark } = useTheme();
+
+  // Theme helpers
+  const textPrimary = { color: theme.colors.primary };
+  const textMuted = { color: theme.colors.textMuted };
+
+  const cardStyle = {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderColor: theme.colors.border,
+  };
+
+  const rowBorder = {
+    borderBottomColor: theme.colors.border,
+  };
 
   return (
     <View
@@ -21,8 +35,8 @@ export default function Settings() {
         <Text
           style={[
             styles.title,
+            textPrimary,
             {
-              color: theme.colors.primary,
               fontSize: theme.fontSize.display,
             },
           ]}
@@ -33,8 +47,8 @@ export default function Settings() {
         <Text
           style={[
             styles.subtitle,
+            textMuted,
             {
-              color: theme.colors.textMuted,
               fontSize: theme.fontSize.sm,
             },
           ]}
@@ -44,124 +58,48 @@ export default function Settings() {
       </View>
 
       {/* Settings Card */}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.colors.surface,
-            borderRadius: theme.radius.xl,
-            borderColor: theme.colors.border,
-          },
-        ]}
-      >
-        {/* Appearance Section */}
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: theme.colors.textMuted,
-            },
-          ]}
-        >
-          Appearance
-        </Text>
+      <View style={[styles.card, cardStyle]}>
+        {/* Appearance */}
+        <Text style={[styles.sectionTitle, textMuted]}>Appearance</Text>
 
-        <View
-          style={[
-            styles.settingRow,
-            {
-              borderBottomColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.settingText,
-              {
-                color: theme.colors.primary,
-              },
-            ]}
-          >
-            Dark Mode
-          </Text>
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textPrimary]}>Dark Mode</Text>
 
-          <Switch onValueChange={toggleTheme} />
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{
+              false: "#D1D5DB",
+              true: theme.colors.primarySoft,
+            }}
+            thumbColor={isDark ? theme.colors.primary : "#FFFFFF"}
+          />
         </View>
 
-        {/* Future Placeholder */}
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: theme.colors.textMuted,
-              marginTop: 24,
-            },
-          ]}
-        >
+        {/* Accessibility */}
+        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
           Accessibility
         </Text>
 
-        <View
-          style={[
-            styles.settingRow,
-            {
-              borderBottomColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.settingText,
-              {
-                color: theme.colors.primary,
-              },
-            ]}
-          >
-            Voice Guidance
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textMuted, styles.italicText]}>
+            SCRUM-29 will build this
           </Text>
-
-          <Switch value={false} disabled />
         </View>
 
         {/* About */}
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: theme.colors.textMuted,
-              marginTop: 24,
-            },
-          ]}
-        >
+        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
           About
         </Text>
 
-        <View style={styles.settingRow}>
-          <Text
-            style={[
-              styles.settingText,
-              {
-                color: theme.colors.primary,
-              },
-            ]}
-          >
-            STEMMLab v1.0
-          </Text>
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textPrimary]}>STEMMLab v1.0</Text>
         </View>
       </View>
 
       {/* Back Button */}
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text
-          style={[
-            styles.backText,
-            {
-              color: theme.colors.primary,
-            },
-          ]}
-        >
-          ← Back
-        </Text>
+      <TouchableOpacity style={styles.backButton} onPress={router.back}>
+        <Text style={[styles.backText, textPrimary]}>← Back</Text>
       </TouchableOpacity>
     </View>
   );
@@ -197,6 +135,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
+  sectionSpacing: {
+    marginTop: 24,
+  },
+
   settingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -208,6 +150,10 @@ const styles = StyleSheet.create({
   settingText: {
     fontSize: 16,
     fontWeight: "500",
+  },
+
+  italicText: {
+    fontStyle: "italic",
   },
 
   backButton: {
