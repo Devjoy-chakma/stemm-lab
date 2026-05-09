@@ -18,33 +18,84 @@ export default function Home() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={[styles.content, { padding: theme.spacing.lg }]}
+      contentContainerStyle={[
+        styles.content,
+        {
+          padding: theme.spacing.lg,
+        },
+      ]}
+      showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.title, { color: theme.colors.primary, fontSize: theme.fontSize.xxl }]}>Activities</Text>
-      <Text style={[styles.subtitle, { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginBottom: theme.spacing.lg }]}>
-        SCRUM-12 will build this properly
-      </Text>
-
-      {ACTIVITIES.map((a) => (
-        <TouchableOpacity
-          key={a.id}
+      {/* Header */}
+      <View style={styles.header}>
+        <Text
           style={[
-            styles.tile,
+            styles.title,
             {
-              backgroundColor: theme.colors.surface,
-              borderRadius: theme.radius.lg,
-              padding: theme.spacing.md,
-              marginBottom: theme.spacing.sm,
-              borderColor: theme.colors.borderStrong,
+              color: theme.colors.primary,
+              fontSize: theme.fontSize.xxl,
             },
           ]}
-          onPress={() => router.push(`/activity/${a.id}`)}
         >
-          <Text style={[styles.tileText, { color: theme.colors.primary, fontSize: theme.fontSize.md }]}>{a.name}</Text>
-        </TouchableOpacity>
-      ))}
+          STEMMLab
+        </Text>
 
-      <View style={[styles.row, { gap: theme.spacing.sm, marginTop: theme.spacing.md }]}>
+        <Text
+          style={[
+            styles.subtitle,
+            {
+              color: theme.colors.textMuted,
+              fontSize: theme.fontSize.sm,
+            },
+          ]}
+        >
+          Explore fun STEMM activities{"\n"}
+          with your team.
+        </Text>
+      </View>
+
+      {/* Activity Grid */}
+      <View style={styles.grid}>
+        {ACTIVITIES.map((a) => (
+          <TouchableOpacity
+            key={a.id}
+            style={[
+              styles.tile,
+              {
+                backgroundColor: theme.colors.surface,
+                borderRadius: theme.radius.lg,
+                borderColor: theme.colors.borderStrong,
+              },
+            ]}
+            onPress={() => router.push(`/activity/${a.id}`)}
+          >
+            <Text style={styles.icon}>{a.icon}</Text>
+
+            <Text
+              style={[
+                styles.tileText,
+                {
+                  color: theme.colors.primary,
+                  fontSize: theme.fontSize.sm,
+                },
+              ]}
+            >
+              {a.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Bottom Buttons */}
+      <View
+        style={[
+          styles.row,
+          {
+            gap: theme.spacing.sm,
+            marginTop: theme.spacing.xl,
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.smallButton,
@@ -54,10 +105,20 @@ export default function Home() {
               paddingVertical: theme.spacing.sm + 4,
             },
           ]}
-          onPress={() => router.push('/leaderboard')}
+          onPress={() => router.push("/leaderboard")}
         >
-          <Text style={[styles.smallButtonText, { color: theme.colors.textOnPrimary }]}>Leaderboard</Text>
+          <Text
+            style={[
+              styles.smallButtonText,
+              {
+                color: theme.colors.textOnPrimary,
+              },
+            ]}
+          >
+            Leaderboard
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={[
             styles.smallButton,
@@ -67,9 +128,18 @@ export default function Home() {
               paddingVertical: theme.spacing.sm + 4,
             },
           ]}
-          onPress={() => router.push('/settings')}
+          onPress={() => router.push("/settings")}
         >
-          <Text style={[styles.smallButtonText, { color: theme.colors.textOnPrimary }]}>Settings</Text>
+          <Text
+            style={[
+              styles.smallButtonText,
+              {
+                color: theme.colors.textOnPrimary,
+              },
+            ]}
+          >
+            Settings
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -77,13 +147,67 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { paddingTop: 60 },
-  title: { fontWeight: '700', marginBottom: 4 },
-  subtitle: {},
-  tile: { borderWidth: 1 },
-  tileText: { fontWeight: '600' },
-  row: { flexDirection: 'row' },
-  smallButton: { flex: 1, alignItems: 'center' },
-  smallButtonText: { fontWeight: '600' },
+  container: {
+    flex: 1,
+  },
+
+  content: {
+    paddingTop: 90,
+    paddingBottom: 40,
+  },
+
+  header: {
+    alignItems: "center",
+    marginBottom: 36,
+  },
+
+  title: {
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  subtitle: {
+    textAlign: "center",
+    maxWidth: 280,
+    lineHeight: 20,
+  },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 14,
+  },
+
+  tile: {
+    width: "48%",
+    borderWidth: 1,
+    minHeight: 140,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+
+  icon: {
+    fontSize: 36,
+    marginBottom: 12,
+  },
+
+  tileText: {
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  row: {
+    flexDirection: "row",
+  },
+
+  smallButton: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  smallButtonText: {
+    fontWeight: "600",
+  },
 });
