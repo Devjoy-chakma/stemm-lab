@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Theme, lightTheme, darkTheme } from './tokens';
+import React, { ReactNode, createContext, useContext, useState } from "react";
+import { Theme, darkTheme, lightTheme } from "./tokens";
 
 interface ThemeContextValue {
   theme: Theme;
+  isDark: boolean;
   toggleTheme: () => void;
   setDarkMode: (dark: boolean) => void;
 }
@@ -14,22 +15,30 @@ interface ThemeProviderProps {
   initialDark?: boolean;
 }
 
-export function ThemeProvider({ children, initialDark = false }: ThemeProviderProps) {
+export function ThemeProvider({
+  children,
+  initialDark = false,
+}: ThemeProviderProps) {
   const [isDark, setIsDark] = useState(initialDark);
 
   const value: ThemeContextValue = {
     theme: isDark ? darkTheme : lightTheme,
+    isDark,
     toggleTheme: () => setIsDark((prev) => !prev),
     setDarkMode: setIsDark,
   };
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
+
   if (!ctx) {
-    throw new Error('useTheme must be used inside <ThemeProvider>');
+    throw new Error("useTheme must be used inside <ThemeProvider>");
   }
+
   return ctx;
 }
