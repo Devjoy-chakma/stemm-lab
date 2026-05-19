@@ -31,8 +31,8 @@ export async function sendToLeaderboard(
     discriminator: team.discriminator,
     activity_id: attempt.activity_id,
     score: attempt.score,
-    year_level: team.year_level,
-    school_code: team.school_code,
+    year_level: team.grade_level,
+    school_code: team.event_code ?? '',
     completed_at: attempt.finished_at,
   };
 
