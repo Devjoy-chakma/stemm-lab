@@ -12,11 +12,13 @@ import {
   View,
 } from "react-native";
 import { createTeamSession } from "../src/database/repositories/teamRepository";
+import { useTeamStore } from "../src/stores";
 import { useTheme } from "../src/theme";
 
 export default function TeamSetup() {
   const router = useRouter();
   const { theme } = useTheme();
+  const setTeam = useTeamStore((s) => s.setTeam);
 
   const [teamName, setTeamName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("5");
@@ -72,12 +74,25 @@ export default function TeamSetup() {
     try {
       setIsSaving(true);
 
-      await createTeamSession({
+      const { teamId, discriminator } = await createTeamSession({
         userId: 1, // temporary until Firebase user is connected to local users table
         teamName: cleanTeamName,
         gradeLevel: numericGrade,
         eventCode: eventCode || null,
         memberNames: cleanMembers,
+      });
+
+      // Wire the freshly created team into the global store so activities
+      // and the leaderboard see a real team instead of falling back to
+      // the 'demo-team' placeholder.
+      setTeam({
+        team_id: String(teamId),
+        team_name: cleanTeamName,
+        year_level: numericGrade,
+        school_code: eventCode.trim() || "",
+        discriminator,
+        members: cleanMembers.map((first_name) => ({ first_name })),
+        created_at: Date.now(),
       });
 
       router.push("/home");
