@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { persistAttempt } from '../database/repositories/attemptRepository';
+
 export interface Attempt {
   attempt_id: string;
   team_id: string;
@@ -76,6 +78,9 @@ export const useAttemptStore = create<AttemptStore>((set, get) => ({
         ...state.current,
         finished_at: Date.now(),
       };
+      // Persist to SQLite in the background; the in-memory store stays
+      // the source of truth for the live session.
+      void persistAttempt(finished);
       return {
         current: finished,
         history: [...state.history, finished],
