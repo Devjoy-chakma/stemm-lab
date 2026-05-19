@@ -88,8 +88,8 @@ export default function TeamSetup() {
       setTeam({
         team_id: String(teamId),
         team_name: cleanTeamName,
-        year_level: numericGrade,
-        school_code: eventCode.trim() || "",
+        grade_level: numericGrade,
+        event_code: eventCode.trim() || null,
         discriminator,
         members: cleanMembers.map((first_name) => ({ first_name })),
         created_at: Date.now(),
