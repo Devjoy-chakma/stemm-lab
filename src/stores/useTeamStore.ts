@@ -5,14 +5,16 @@ export interface TeamMember {
   first_name: string;
 }
 
+// Field names mirror the SQLite `teams` table (see src/database/schema.ts)
+// so the store, the repository, and persistence stay in sync.
 export interface Team {
-  team_id: string;          
+  team_id: string;
   team_name: string;
-  year_level: number;       // 3 to 9
-  school_code: string;
-  discriminator: string;    // 4-char random code, used in leaderboard
+  grade_level: number;          // 3 to 9 (was: year_level)
+  event_code: string | null;    // optional class/event code (was: school_code)
+  discriminator: string;        // STEM-#### code, used in the leaderboard
   members: TeamMember[];
-  created_at: number;       // Date.now()
+  created_at: number;           // Date.now()
 }
 
 interface TeamStore {
