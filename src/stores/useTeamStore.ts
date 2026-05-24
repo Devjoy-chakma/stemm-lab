@@ -11,7 +11,6 @@ export interface Team {
   team_id: string;
   team_name: string;
   grade_level: number;          // 3 to 9 (was: year_level)
-  event_code: string | null;    // optional class/event code (was: school_code)
   discriminator: string;        // STEM-#### code, used in the leaderboard
   members: TeamMember[];
   created_at: number;           // Date.now()

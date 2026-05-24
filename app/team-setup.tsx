@@ -79,7 +79,6 @@ export default function TeamSetup() {
         userId: 1,
         teamName: cleanTeamName,
         gradeLevel: numericGrade,
-        eventCode: null,
         memberNames: cleanMembers,
       });
 
@@ -87,7 +86,6 @@ export default function TeamSetup() {
         team_id: String(teamId),
         team_name: cleanTeamName,
         grade_level: numericGrade,
-        event_code: null,
         discriminator,
         members: cleanMembers.map((first_name) => ({
           first_name,

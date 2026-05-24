@@ -4,7 +4,6 @@ type CreateTeamInput = {
   userId: number;
   teamName: string;
   gradeLevel: number;
-  eventCode?: string | null;
   memberNames: string[];
 };
 
@@ -38,7 +37,6 @@ export async function createTeamSession(input: CreateTeamInput) {
       team_name,
       discriminator,
       grade_level,
-      event_code,
       created_at,
       ended_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -47,7 +45,6 @@ export async function createTeamSession(input: CreateTeamInput) {
       input.teamName.trim(),
       discriminator,
       input.gradeLevel,
-      input.eventCode?.trim() || null,
       now,
       null,
     ]
