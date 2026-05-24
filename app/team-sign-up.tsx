@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   },
 
   gradeContainer: {
-    flex: 1,
+    width: 74,
     gap: 6,
   },
 
