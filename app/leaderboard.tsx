@@ -247,10 +247,7 @@ export default function Leaderboard() {
                       style={[
                         styles.score,
                         {
-                          color:
-                            index === 0
-                              ? theme.colors.primary
-                              : theme.colors.success,
+                          color: theme.colors.primary,
                         },
                       ]}
                     >
@@ -261,10 +258,7 @@ export default function Leaderboard() {
                       style={[
                         styles.scoreLabel,
                         {
-                          color:
-                            index === 0
-                              ? theme.colors.primarySoft
-                              : theme.colors.textMuted,
+                          color: theme.colors.primarySoft,
                         },
                       ]}
                     >
@@ -273,50 +267,34 @@ export default function Leaderboard() {
                   </View>
                 </View>
 
-                {/* TEAM */}
-                <Text
-                  style={[
-                    styles.teamName,
-                    {
-                      color:
-                        index === 0 ? theme.colors.primary : theme.colors.text,
-                    },
-                  ]}
-                >
-                  {item.team_name}
-                </Text>
-
-                {/* ACTIVITY */}
-                <View
-                  style={[
-                    styles.activityPill,
-                    {
-                      backgroundColor:
-                        index === 0
-                          ? theme.colors.surface
-                          : theme.colors.surfaceMuted,
-                    },
-                  ]}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ fontSize: 14 }}>
-                      {ACTIVITY_META[item.activity_id]?.icon}
+                {/* BOTTOM ROW */}
+                <View style={styles.bottomRow}>
+                  <View style={styles.teamSection}>
+                    <Text
+                      style={[
+                        styles.teamName,
+                        {
+                          color:
+                            index === 0
+                              ? theme.colors.primary
+                              : theme.colors.text,
+                        },
+                      ]}
+                    >
+                      {item.team_name}
                     </Text>
+                  </View>
 
+                  <View style={styles.activitySection}>
                     <Text
                       style={[
                         styles.activityText,
                         {
                           color: theme.colors.primary,
-                          marginLeft: 6,
                         },
                       ]}
                     >
+                      {ACTIVITY_META[item.activity_id]?.icon}{" "}
                       {ACTIVITY_META[item.activity_id]?.label ??
                         item.activity_id}
                     </Text>
@@ -457,7 +435,7 @@ const styles = StyleSheet.create({
   },
 
   score: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: "800",
     lineHeight: 44,
   },
@@ -466,24 +444,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     letterSpacing: 1.5,
-    fontWeight: "600",
+    fontWeight: "500",
   },
 
   teamName: {
     fontSize: 20,
     fontWeight: "700",
+  },
+
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+
     marginTop: 18,
   },
 
-  activityPill: {
-    alignSelf: "flex-start",
+  teamSection: {
+    flex: 1,
+    paddingRight: 12,
+  },
 
-    marginTop: 12,
-
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-
-    borderRadius: 999,
+  activitySection: {
+    justifyContent: "flex-end",
   },
 
   activityText: {
