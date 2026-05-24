@@ -19,25 +19,33 @@ import { useTheme } from "../src/theme";
 
 export default function TeamSignUp() {
   const router = useRouter();
+
   const { theme } = useTheme();
+
   const setTeam = useTeamStore((s) => s.setTeam);
 
   const [teamName, setTeamName] = useState("");
+
   const [gradeLevel, setGradeLevel] = useState("");
-  const [members, setMembers] = useState([""]);
+
+  const [members, setMembers] = useState(["", ""]);
+
   const [teamPin, setTeamPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
+
   const [isSaving, setIsSaving] = useState(false);
 
   function updateMember(index: number, value: string) {
     const nextMembers = [...members];
+
     nextMembers[index] = value;
+
     setMembers(nextMembers);
   }
 
   function addMember() {
     if (members.length >= 4) {
       Alert.alert("Limit reached", "A team can have up to 4 members.");
+
       return;
     }
 
@@ -59,6 +67,7 @@ export default function TeamSignUp() {
 
     if (cleanTeamName.length < 2 || cleanTeamName.length > 20) {
       Alert.alert("Invalid team name", "Team name must be 2–20 characters.");
+
       return;
     }
 
@@ -68,21 +77,19 @@ export default function TeamSignUp() {
       numericGrade > 9
     ) {
       Alert.alert("Invalid grade", "Grade level must be between 3 and 9.");
+
       return;
     }
 
     if (cleanMembers.length === 0) {
       Alert.alert("Missing members", "Add at least one team member.");
+
       return;
     }
 
     if (teamPin.length !== 4) {
-      Alert.alert("Invalid PIN", "Team PIN must be 4 digits.");
-      return;
-    }
+      Alert.alert("Invalid PIN", "PIN must be exactly 4 digits.");
 
-    if (teamPin !== confirmPin) {
-      Alert.alert("PIN mismatch", "PINs do not match.");
       return;
     }
 
@@ -157,54 +164,66 @@ export default function TeamSignUp() {
         </Text>
 
         <View style={styles.form}>
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.colors.text,
-              },
-            ]}
-          >
-            Team name
-          </Text>
+          <View style={styles.topRow}>
+            <View style={styles.teamNameContainer}>
+              <Text
+                style={[
+                  styles.label,
+                  {
+                    color: theme.colors.text,
+                  },
+                ]}
+              >
+                Team name
+              </Text>
 
-          <TextInput
-            value={teamName}
-            onChangeText={setTeamName}
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                color: theme.colors.text,
-              },
-            ]}
-          />
+              <TextInput
+                value={teamName}
+                onChangeText={setTeamName}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.surface,
 
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.colors.text,
-              },
-            ]}
-          >
-            Grade level (3–9)
-          </Text>
+                    borderColor: theme.colors.border,
 
-          <TextInput
-            value={gradeLevel}
-            onChangeText={setGradeLevel}
-            keyboardType="number-pad"
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                color: theme.colors.text,
-              },
-            ]}
-          />
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.gradeContainer}>
+              <Text
+                style={[
+                  styles.label,
+                  {
+                    color: theme.colors.text,
+                  },
+                ]}
+              >
+                Grade
+              </Text>
+
+              <TextInput
+                value={gradeLevel}
+                onChangeText={setGradeLevel}
+                keyboardType="number-pad"
+                placeholder="3–9"
+                placeholderTextColor={theme.colors.textMuted}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.surface,
+
+                    borderColor: theme.colors.border,
+
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+            </View>
+          </View>
 
           <Text
             style={[
@@ -222,13 +241,15 @@ export default function TeamSignUp() {
               <TextInput
                 value={member}
                 onChangeText={(value) => updateMember(index, value)}
-                placeholder={`Member ${index + 1} first name`}
+                placeholder={`Member ${index + 1} name`}
                 placeholderTextColor={theme.colors.textMuted}
                 style={[
                   styles.memberInput,
                   {
                     backgroundColor: theme.colors.surface,
+
                     borderColor: theme.colors.border,
+
                     color: theme.colors.text,
                   },
                 ]}
@@ -268,6 +289,7 @@ export default function TeamSignUp() {
             <Text
               style={{
                 color: theme.colors.primary,
+
                 fontWeight: "600",
               }}
             >
@@ -292,38 +314,15 @@ export default function TeamSignUp() {
             keyboardType="number-pad"
             secureTextEntry
             maxLength={4}
+            placeholder="Required 4-digit PIN"
+            placeholderTextColor={theme.colors.textMuted}
             style={[
               styles.input,
               {
                 backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                color: theme.colors.text,
-              },
-            ]}
-          />
 
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.colors.text,
-              },
-            ]}
-          >
-            Confirm PIN
-          </Text>
-
-          <TextInput
-            value={confirmPin}
-            onChangeText={setConfirmPin}
-            keyboardType="number-pad"
-            secureTextEntry
-            maxLength={4}
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
+
                 color: theme.colors.text,
               },
             ]}
@@ -335,7 +334,9 @@ export default function TeamSignUp() {
               styles.primaryButton,
               {
                 backgroundColor: theme.colors.primary,
+
                 borderRadius: theme.radius.lg,
+
                 opacity: isSaving ? 0.6 : 1,
               },
             ]}
@@ -380,9 +381,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  topRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+
+  teamNameContainer: {
+    flex: 3,
+    gap: 6,
+  },
+
+  gradeContainer: {
+    flex: 1,
+    gap: 6,
+  },
+
   label: {
     fontSize: 14,
     fontWeight: "600",
+    paddingLeft: 3,
   },
 
   input: {
