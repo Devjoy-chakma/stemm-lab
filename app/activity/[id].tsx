@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import HandFan from '../../src/activities/HandFan';
 import HumanPerformance from "../../src/activities/HumanPerformance";
 import ParachuteDrop from '../../src/activities/ParachuteDrop';
+import ReactionBoard from "../../src/activities/ReactionBoard";
 import SoundPollution from '../../src/activities/SoundPollution';
 import { useTheme } from '../../src/theme';
 
@@ -19,6 +20,8 @@ export default function ActivityRoute() {
       return <HandFan />;
     case "human-perf":
       return <HumanPerformance />;
+    case "reaction":
+      return <ReactionBoard />;
     default:
       return (
         <View
