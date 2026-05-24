@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import BreathingPace from "../../src/activities/BreathingPace";
 import HandFan from '../../src/activities/HandFan';
 import HumanPerformance from "../../src/activities/HumanPerformance";
@@ -25,19 +25,6 @@ export default function ActivityRoute() {
       return <ReactionBoard />;
     case "breathing":
       return <BreathingPace />;
-    default:
-      return (
-        <View
-          style={[s.fallback, { backgroundColor: theme.colors.background }]}
-        >
-          <Text style={[s.heading, { color: theme.colors.primary }]}>
-            Activity coming soon
-          </Text>
-          <Text style={[s.body, { color: theme.colors.textMuted }]}>
-            "{id}" isn't built yet. Check back in Sprint 2.
-          </Text>
-        </View>
-      );
   }
 }
 
