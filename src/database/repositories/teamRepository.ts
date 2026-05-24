@@ -39,7 +39,7 @@ export async function createTeamSession(input: CreateTeamInput) {
       grade_level,
       created_at,
       ended_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
     [
       input.userId,
       input.teamName.trim(),

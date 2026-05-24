@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS teams (
   team_name TEXT NOT NULL,
   discriminator TEXT NOT NULL UNIQUE,
   grade_level INTEGER NOT NULL,
-  event_code TEXT,
   created_at TEXT NOT NULL,
   ended_at TEXT,
   FOREIGN KEY(user_id) REFERENCES users(user_id)
