@@ -1,5 +1,8 @@
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -10,6 +13,7 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
+import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
@@ -18,12 +22,16 @@ const TOTAL_ROUNDS = 3;
 export default function ReactionBoard() {
   const { theme } = useTheme();
 
+  const router = useRouter();
+
   const team = useTeamStore((s) => s.team);
 
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
+  const updateRawData = useAttemptStore((s) => s.updateRawData);
+  const current = useAttemptStore((s) => s.current);
 
   const [gameStarted, setGameStarted] = useState(false);
   const [waitingForTap, setWaitingForTap] = useState(false);
@@ -34,6 +42,9 @@ export default function ReactionBoard() {
   const [reactionTimes, setReactionTimes] = useState<number[]>([]);
 
   const [submitted, setSubmitted] = useState(false);
+
+  const [sending, setSending] = useState(false);
+  const [sentToLeaderboard, setSentToLeaderboard] = useState(false);
 
   const [writeUpText, setWriteUpTextLocal] = useState("");
 
@@ -97,6 +108,13 @@ export default function ReactionBoard() {
 
     const score = Math.max(0, Math.round(100 - (avg - 200) / 8));
 
+    updateRawData({
+      reactionTimes: times,
+      averageReaction: avg,
+      fastestReaction: Math.min(...times),
+      rounds: TOTAL_ROUNDS,
+    });
+
     setScore(score);
 
     finishAttempt();
@@ -106,10 +124,52 @@ export default function ReactionBoard() {
     setSubmitted(true);
   };
 
+  const handleSendToLeaderboard = async () => {
+    if (!team) {
+      Alert.alert("No team set", "Set up a team first.");
+      return;
+    }
+
+    if (!current) {
+      Alert.alert("No attempt", "Submit your run first.");
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      await sendToLeaderboard(current, team);
+
+      setSentToLeaderboard(true);
+
+      Alert.alert("Sent!", "Your score is on the leaderboard.");
+    } catch (e: any) {
+      Alert.alert("Send failed", e.message ?? "Unknown error");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleTryAgain = () => {
     setReactionTimes([]);
+
     setRound(1);
+
     setSubmitted(false);
+
+    setSending(false);
+    setSentToLeaderboard(false);
+
+    setGameStarted(false);
+    setWaitingForTap(false);
+    setShowTap(false);
+
+    setWriteUp("");
+    setWriteUpTextLocal("");
+
+    const teamId = team?.team_id ?? "demo-team";
+
+    startAttempt(teamId, "reaction");
   };
 
   const handleWriteUpChange = (text: string) => {
@@ -209,7 +269,7 @@ export default function ReactionBoard() {
             Round {Math.min(round, TOTAL_ROUNDS)} / {TOTAL_ROUNDS}
           </Text>
 
-          {!gameStarted && reactionTimes.length === 0 ? (
+          {!gameStarted && reactionTimes.length === 0 && !submitted ? (
             <TouchableOpacity
               style={[
                 s.button,
@@ -294,6 +354,22 @@ export default function ReactionBoard() {
               </Text>
             </TouchableOpacity>
           ) : null}
+
+          {submitted ? (
+            <Text
+              style={[
+                s.p,
+                {
+                  color: theme.colors.textMuted,
+                  fontSize: theme.fontSize.sm,
+                  marginTop: theme.spacing.lg,
+                  textAlign: "center",
+                },
+              ]}
+            >
+              Submitted. Tap the Results tab to see your score.
+            </Text>
+          ) : null}
         </View>
       }
       results={
@@ -360,10 +436,56 @@ export default function ReactionBoard() {
                 <MetricCard label="Rounds" value={String(TOTAL_ROUNDS)} />
               </View>
 
+              {!sentToLeaderboard ? (
+                <TouchableOpacity
+                  style={[
+                    s.cta,
+                    {
+                      backgroundColor: theme.colors.accent,
+                      borderRadius: theme.radius.lg,
+                      paddingVertical: theme.spacing.md,
+                      marginTop: theme.spacing.lg,
+                      opacity: sending ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={handleSendToLeaderboard}
+                  disabled={sending}
+                >
+                  {sending ? (
+                    <ActivityIndicator color={theme.colors.textOnPrimary} />
+                  ) : (
+                    <Text
+                      style={[
+                        s.buttonText,
+                        {
+                          color: theme.colors.textOnPrimary,
+                        },
+                      ]}
+                    >
+                      Send to leaderboard 🏆
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[
+                    s.p,
+                    {
+                      color: theme.colors.success,
+                      textAlign: "center",
+                      marginTop: theme.spacing.lg,
+                      fontSize: theme.fontSize.md,
+                    },
+                  ]}
+                >
+                  ✓ Sent to leaderboard
+                </Text>
+              )}
+
               <TouchableOpacity
                 onPress={handleTryAgain}
                 style={{
-                  marginTop: theme.spacing.lg,
+                  marginTop: theme.spacing.md,
                 }}
               >
                 <Text
@@ -371,6 +493,7 @@ export default function ReactionBoard() {
                     s.p,
                     {
                       color: theme.colors.primarySoft,
+                      fontSize: theme.fontSize.sm,
                       textAlign: "center",
                       textDecorationLine: "underline",
                     },
@@ -485,6 +608,10 @@ const s = StyleSheet.create({
 
   cards: {
     flexDirection: "column",
+  },
+
+  cta: {
+    alignItems: "center",
   },
 
   textarea: {
