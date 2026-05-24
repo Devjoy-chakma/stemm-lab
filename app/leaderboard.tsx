@@ -51,32 +51,25 @@ export default function Leaderboard() {
         },
       ]}
     >
-      {/* HERO */}
-      {/* HERO */}
+      {/* HEADER */}
       <View
         style={[
-          styles.hero,
+          styles.header,
           {
-            backgroundColor: theme.colors.surfaceMuted,
             borderBottomColor: theme.colors.border,
+            backgroundColor: theme.colors.background,
           },
         ]}
       >
-        {/* TOP BAR */}
-        <View style={styles.topBar}>
+        {/* TOP ROW */}
+        <View style={styles.headerTopRow}>
           <TouchableOpacity
-            style={[
-              styles.backButton,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
+            style={styles.headerBackButton}
             onPress={() => router.back()}
           >
             <Text
               style={[
-                styles.backButtonText,
+                styles.headerBackText,
                 {
                   color: theme.colors.primary,
                 },
@@ -85,30 +78,33 @@ export default function Leaderboard() {
               ←
             </Text>
           </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text
+              style={[
+                styles.headerTitle,
+                {
+                  color: theme.colors.primary,
+                },
+              ]}
+            >
+              Leaderboard
+            </Text>
+
+            <Text
+              style={[
+                styles.headerSubtitle,
+                {
+                  color: theme.colors.textMuted,
+                },
+              ]}
+            >
+              Top STEMMLab performers
+            </Text>
+          </View>
+
+          <View style={styles.headerSpacer} />
         </View>
-
-        {/* TITLE */}
-        <Text
-          style={[
-            styles.heroTitle,
-            {
-              color: theme.colors.primary,
-            },
-          ]}
-        >
-          Leaderboard
-        </Text>
-
-        <Text
-          style={[
-            styles.heroSubtitle,
-            {
-              color: theme.colors.textMuted,
-            },
-          ]}
-        >
-          Top STEMMLab team performances
-        </Text>
       </View>
 
       {/* EMPTY */}
@@ -151,7 +147,13 @@ export default function Leaderboard() {
                   styles.card,
                   {
                     backgroundColor:
-                      index === 0 ? theme.colors.accent : theme.colors.surface,
+                      index === 0
+                        ? theme.colors.accent
+                        : index === 1
+                        ? "#D9DDE3"
+                        : index === 2
+                        ? "#D6B38A"
+                        : theme.colors.surface,
 
                     borderRadius: theme.radius.xl,
 
@@ -172,9 +174,14 @@ export default function Leaderboard() {
                     style={[
                       styles.rankBadge,
                       {
-                        backgroundColor: isTopThree
-                          ? theme.colors.primary
-                          : theme.colors.surfaceMuted,
+                        backgroundColor:
+                          index === 0
+                            ? theme.colors.primary
+                            : index === 1
+                            ? "#7B8794"
+                            : index === 2
+                            ? "#8C6239"
+                            : theme.colors.surfaceMuted,
                       },
                     ]}
                   >
@@ -273,24 +280,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  hero: {
-    paddingTop: 64,
-    paddingBottom: 24,
+  header: {
+    paddingTop: 58,
+    paddingBottom: 18,
     paddingHorizontal: 20,
 
     borderBottomWidth: 1,
   },
 
-  heroTitle: {
-    fontSize: 32,
-    fontWeight: "700",
-    marginTop: 18,
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    marginTop: 4,
   },
 
-  heroSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
+  headerBackButton: {
+    width: 42,
+    height: 42,
+
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  headerBackText: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+
+  headerSpacer: {
+    width: 42,
+  },
+
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  headerCenter: {
+    alignItems: "center",
   },
 
   topBar: {
