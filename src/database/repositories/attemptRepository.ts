@@ -1,5 +1,5 @@
-import { getDatabase } from "../database";
 import type { Attempt } from "../../stores/useAttemptStore";
+import { getDatabase } from "../database";
 
 // Minimal display metadata so the activities FK on activity_attempts is
 // satisfied even though the activities table is never seeded elsewhere.
@@ -7,9 +7,47 @@ const ACTIVITY_META: Record<
   string,
   { name: string; category: string; icon: string; sort_order: number }
 > = {
-  parachute: { name: "Parachute Drop", category: "engineering", icon: "🪂", sort_order: 1 },
-  sound: { name: "Sound Pollution", category: "environment", icon: "🔊", sort_order: 2 },
-  "hand-fan": { name: "Hand Fan", category: "physics", icon: "🪭", sort_order: 3 },
+  parachute: {
+    name: "Parachute Drop",
+    category: "engineering",
+    icon: "🪂",
+    sort_order: 1,
+  },
+
+  sound: {
+    name: "Sound Pollution",
+    category: "environment",
+    icon: "🔊",
+    sort_order: 2,
+  },
+
+  "hand-fan": {
+    name: "Hand Fan",
+    category: "physics",
+    icon: "🪭",
+    sort_order: 3,
+  },
+
+  "human-perf": {
+    name: "Human Performance",
+    category: "fitness",
+    icon: "🏃",
+    sort_order: 4,
+  },
+
+  reaction: {
+    name: "Reaction Board",
+    category: "reaction",
+    icon: "⚡",
+    sort_order: 5,
+  },
+
+  breathing: {
+    name: "Breathing Pace",
+    category: "wellness",
+    icon: "🫁",
+    sort_order: 6,
+  },
 };
 
 async function ensureActivityRow(
