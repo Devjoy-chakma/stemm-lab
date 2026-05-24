@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
+import BreathingPace from "../../src/activities/BreathingPace";
 import HandFan from '../../src/activities/HandFan';
 import HumanPerformance from "../../src/activities/HumanPerformance";
 import ParachuteDrop from '../../src/activities/ParachuteDrop';
@@ -22,6 +23,8 @@ export default function ActivityRoute() {
       return <HumanPerformance />;
     case "reaction":
       return <ReactionBoard />;
+    case "breathing":
+      return <BreathingPace />;
     default:
       return (
         <View
