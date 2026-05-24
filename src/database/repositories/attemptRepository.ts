@@ -139,3 +139,29 @@ export async function persistAttempt(attempt: Attempt): Promise<void> {
     console.error("Failed to persist attempt:", error);
   }
 }
+export async function getLeaderboard() {
+  const db = await getDatabase();
+
+  return db.getAllAsync(`
+    SELECT
+      aa.attempt_id,
+      aa.activity_id,
+      aa.completed_at,
+
+      t.team_name,
+
+      ar.metric_value AS score
+
+    FROM activity_attempts aa
+
+    JOIN teams t
+      ON t.team_id = aa.team_id
+
+    LEFT JOIN attempt_results ar
+      ON ar.attempt_id = aa.attempt_id
+
+    WHERE aa.status = 'completed'
+
+    ORDER BY ar.metric_value DESC
+  `);
+}
