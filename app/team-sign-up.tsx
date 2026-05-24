@@ -354,6 +354,22 @@ export default function TeamSignUp() {
               {isSaving ? "Creating..." : "Create Team"}
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text
+              style={[
+                styles.backText,
+                {
+                  color: theme.colors.primarySoft,
+                },
+              ]}
+            >
+              ← Back
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -450,5 +466,15 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: "700",
+  },
+
+  backButton: {
+    marginTop: 14,
+    alignItems: "center",
+  },
+
+  backText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
