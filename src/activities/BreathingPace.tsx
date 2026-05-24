@@ -15,7 +15,7 @@ import MetricCard from "../components/MetricCard";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
-const SESSION_DURATION = 30;
+const SESSION_DURATION = 15;
 
 export default function BreathingPace() {
   const { theme } = useTheme();
