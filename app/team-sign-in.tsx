@@ -209,7 +209,7 @@ export default function TeamSignIn() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.replace("/")}
+            onPress={() => router.back()}
           >
             <Text
               style={[
