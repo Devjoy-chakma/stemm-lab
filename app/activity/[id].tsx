@@ -1,24 +1,29 @@
-import { Text, View, StyleSheet } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import ParachuteDrop from '../../src/activities/ParachuteDrop';
+import { useLocalSearchParams } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
 import HandFan from '../../src/activities/HandFan';
-import { useTheme } from '../../src/theme';
+import HumanPerformance from "../../src/activities/HumanPerformance";
+import ParachuteDrop from '../../src/activities/ParachuteDrop';
 import SoundPollution from '../../src/activities/SoundPollution';
+import { useTheme } from '../../src/theme';
 
 export default function ActivityRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme } = useTheme();
 
   switch (id) {
-    case 'parachute':
+    case "parachute":
       return <ParachuteDrop />;
-    case 'sound':
+    case "sound":
       return <SoundPollution />;
-    case 'hand-fan':
+    case "hand-fan":
       return <HandFan />;
+    case "human-perf":
+      return <HumanPerformance />;
     default:
       return (
-        <View style={[s.fallback, { backgroundColor: theme.colors.background }]}>
+        <View
+          style={[s.fallback, { backgroundColor: theme.colors.background }]}
+        >
           <Text style={[s.heading, { color: theme.colors.primary }]}>
             Activity coming soon
           </Text>
