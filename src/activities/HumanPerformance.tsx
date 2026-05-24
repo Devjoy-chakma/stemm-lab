@@ -36,6 +36,12 @@ export default function HumanPerformance() {
 
   const movementSamples = useRef<number[]>([]);
 
+  const previousReading = useRef({
+    x: 0,
+    y: 0,
+    z: 0,
+  });
+
   useEffect(() => {
     const teamId = team?.team_id ?? "demo-team";
     startAttempt(teamId, "human-perf");
@@ -49,9 +55,15 @@ export default function HumanPerformance() {
       Accelerometer.setUpdateInterval(200);
 
       subscription = Accelerometer.addListener((data) => {
-        const movement = Math.abs(data.x) + Math.abs(data.y) + Math.abs(data.z);
+        const dx = Math.abs(data.x - previousReading.current.x);
+        const dy = Math.abs(data.y - previousReading.current.y);
+        const dz = Math.abs(data.z - previousReading.current.z);
+
+        const movement = dx + dy + dz;
 
         movementSamples.current.push(movement);
+
+        previousReading.current = data;
       });
     }
 
@@ -80,6 +92,12 @@ export default function HumanPerformance() {
   const handleStart = () => {
     movementSamples.current = [];
 
+    previousReading.current = {
+      x: 0,
+      y: 0,
+      z: 0,
+    };
+
     setCountdown(10);
     setSubmitted(false);
 
@@ -100,7 +118,7 @@ export default function HumanPerformance() {
 
     const roundedMovement = Number(avgMovement.toFixed(2));
 
-    let score = Math.max(0, Math.round(100 - roundedMovement * 20));
+    let score = Math.max(0, Math.round(100 - roundedMovement * 10));
 
     setMovementScore(roundedMovement);
     setStabilityScore(score);
