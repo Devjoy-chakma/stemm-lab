@@ -29,6 +29,7 @@ export default function HumanPerformance() {
 
   const [movementScore, setMovementScore] = useState(0);
   const [stabilityScore, setStabilityScore] = useState(0);
+  const [performanceLevel, setPerformanceLevel] = useState("");
 
   const [submitted, setSubmitted] = useState(false);
 
@@ -103,6 +104,7 @@ export default function HumanPerformance() {
 
     setMovementScore(0);
     setStabilityScore(0);
+    setPerformanceLevel("");
 
     setIsRunning(true);
   };
@@ -126,6 +128,18 @@ export default function HumanPerformance() {
     setScore(score);
 
     finishAttempt();
+
+    let performance = "Needs Improvement";
+
+    if (score >= 90) {
+      performance = "Excellent";
+    } else if (score >= 80) {
+      performance = "Good";
+    } else if (score >= 70) {
+      performance = "Fair";
+    }
+
+    setPerformanceLevel(performance);
   };
 
   const handleSubmit = () => {
@@ -327,6 +341,21 @@ export default function HumanPerformance() {
                 ]}
               >
                 {stabilityScore}
+              </Text>
+
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.textMuted,
+                    textAlign: "center",
+                    marginTop: theme.spacing.sm,
+                    fontSize: theme.fontSize.lg,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {performanceLevel}
               </Text>
 
               <View
