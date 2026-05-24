@@ -100,6 +100,7 @@ export default function TeamSignUp() {
         userId: 1,
         teamName: cleanTeamName,
         gradeLevel: numericGrade,
+        teamPin,
         memberNames: cleanMembers,
       });
 
