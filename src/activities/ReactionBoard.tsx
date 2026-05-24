@@ -13,7 +13,7 @@ import MetricCard from "../components/MetricCard";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
-const TOTAL_ROUNDS = 5;
+const TOTAL_ROUNDS = 3;
 
 export default function ReactionBoard() {
   const { theme } = useTheme();
