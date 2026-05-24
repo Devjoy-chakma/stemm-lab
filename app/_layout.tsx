@@ -22,6 +22,13 @@ export default function RootLayout() {
             gestureEnabled: false,
           }}
         />
+
+        <Stack.Screen
+          name="team-sign-up"
+          options={{
+            gestureEnabled: false,
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
