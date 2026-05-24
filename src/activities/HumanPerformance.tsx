@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { Accelerometer } from "expo-sensors";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -17,12 +18,15 @@ import { useTheme } from "../theme";
 export default function HumanPerformance() {
   const { theme } = useTheme();
 
+  const router = useRouter();
+
   const team = useTeamStore((s) => s.team);
 
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
+  const updateRawData = useAttemptStore((s) => s.updateRawData);
 
   const [isRunning, setIsRunning] = useState(false);
   const [countdown, setCountdown] = useState(10);
@@ -100,10 +104,12 @@ export default function HumanPerformance() {
     };
 
     setCountdown(10);
+
     setSubmitted(false);
 
     setMovementScore(0);
     setStabilityScore(0);
+
     setPerformanceLevel("");
 
     setIsRunning(true);
@@ -122,13 +128,6 @@ export default function HumanPerformance() {
 
     let score = Math.max(0, Math.round(100 - roundedMovement * 10));
 
-    setMovementScore(roundedMovement);
-    setStabilityScore(score);
-
-    setScore(score);
-
-    finishAttempt();
-
     let performance = "Needs Improvement";
 
     if (score >= 90) {
@@ -139,7 +138,45 @@ export default function HumanPerformance() {
       performance = "Fair";
     }
 
+    setMovementScore(roundedMovement);
+    setStabilityScore(score);
+
+    updateRawData({
+      movementScore: roundedMovement,
+      stabilityScore: score,
+      performanceLevel: performance,
+      duration: 10,
+      samplesCollected: samples.length,
+    });
+
+    setScore(score);
+
+    finishAttempt();
+
     setPerformanceLevel(performance);
+  };
+
+  const handleTryAgain = () => {
+    movementSamples.current = [];
+
+    previousReading.current = {
+      x: 0,
+      y: 0,
+      z: 0,
+    };
+
+    setCountdown(10);
+
+    setSubmitted(false);
+
+    setMovementScore(0);
+    setStabilityScore(0);
+
+    setPerformanceLevel("");
+
+    const teamId = team?.team_id ?? "demo-team";
+
+    startAttempt(teamId, "human-perf");
   };
 
   const handleSubmit = () => {
@@ -375,6 +412,49 @@ export default function HumanPerformance() {
                   unit="/100"
                 />
               </View>
+
+              <TouchableOpacity
+                onPress={handleTryAgain}
+                style={{
+                  marginTop: theme.spacing.lg,
+                }}
+              >
+                <Text
+                  style={[
+                    s.p,
+                    {
+                      color: theme.colors.primarySoft,
+                      textAlign: "center",
+                      textDecorationLine: "underline",
+                    },
+                  ]}
+                >
+                  Try again
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  s.button,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    borderRadius: theme.radius.lg,
+                    marginTop: theme.spacing.md,
+                  },
+                ]}
+                onPress={() => router.push("/leaderboard")}
+              >
+                <Text
+                  style={[
+                    s.buttonText,
+                    {
+                      color: theme.colors.textOnPrimary,
+                    },
+                  ]}
+                >
+                  View Leaderboard
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
