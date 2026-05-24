@@ -12,8 +12,16 @@ import { getLeaderboard } from "../src/database/repositories/attemptRepository";
 import { useTheme } from "../src/theme";
 
 const ACTIVITY_LABELS: Record<string, string> = {
-  reaction: "⚡ Reaction Board",
+  parachute: "🪂 Parachute Drop",
+
+  sound: "🔊 Sound Pollution",
+
+  "hand-fan": "🪭 Hand Fan",
+
   "human-perf": "⚖️ Human Performance",
+
+  reaction: "⚡ Reaction Board",
+
   breathing: "🫁 Breathing Pace",
 };
 
