@@ -1,7 +1,8 @@
-import { useRouter } from "expo-router";
 import { Accelerometer } from "expo-sensors";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -12,15 +13,16 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
+import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
 export default function HumanPerformance() {
   const { theme } = useTheme();
 
-  const router = useRouter();
-
   const team = useTeamStore((s) => s.team);
+
+  const current = useAttemptStore((s) => s.current);
 
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
@@ -36,6 +38,9 @@ export default function HumanPerformance() {
   const [performanceLevel, setPerformanceLevel] = useState("");
 
   const [submitted, setSubmitted] = useState(false);
+
+  const [sending, setSending] = useState(false);
+  const [sentToLeaderboard, setSentToLeaderboard] = useState(false);
 
   const [writeUpText, setWriteUpTextLocal] = useState("");
 
@@ -156,6 +161,34 @@ export default function HumanPerformance() {
     setPerformanceLevel(performance);
   };
 
+  const handleSubmit = () => {
+    setSubmitted(true);
+  };
+
+  const handleSendToLeaderboard = async () => {
+    if (!team) {
+      Alert.alert("No team set", "Set up a team first.");
+      return;
+    }
+
+    if (!current) {
+      Alert.alert("No attempt", "Submit your run first.");
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      await sendToLeaderboard(current, team);
+      setSentToLeaderboard(true);
+      Alert.alert("Sent!", "Your score is on the leaderboard.");
+    } catch (e: any) {
+      Alert.alert("Send failed", e.message ?? "Unknown error");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleTryAgain = () => {
     movementSamples.current = [];
 
@@ -166,21 +199,19 @@ export default function HumanPerformance() {
     };
 
     setCountdown(10);
-
     setSubmitted(false);
+    setSending(false);
+    setSentToLeaderboard(false);
 
     setMovementScore(0);
     setStabilityScore(0);
-
     setPerformanceLevel("");
 
+    setWriteUpTextLocal("");
+    setWriteUp("");
+
     const teamId = team?.team_id ?? "demo-team";
-
     startAttempt(teamId, "human-perf");
-  };
-
-  const handleSubmit = () => {
-    setSubmitted(true);
   };
 
   const handleWriteUpChange = (text: string) => {
@@ -290,54 +321,74 @@ export default function HumanPerformance() {
               Hold your phone steady...
             </Text>
           ) : (
-            <TouchableOpacity
-              style={[
-                s.button,
-                {
-                  backgroundColor: theme.colors.primary,
-                  borderRadius: theme.radius.lg,
-                  marginTop: theme.spacing.lg,
-                },
-              ]}
-              onPress={handleStart}
-            >
-              <Text
-                style={[
-                  s.buttonText,
-                  {
-                    color: theme.colors.textOnPrimary,
-                  },
-                ]}
-              >
-                Start Challenge
-              </Text>
-            </TouchableOpacity>
-          )}
+            <>
+              {!isRunning && stabilityScore === 0 && !submitted ? (
+                <TouchableOpacity
+                  style={[
+                    s.button,
+                    {
+                      backgroundColor: theme.colors.primary,
+                      borderRadius: theme.radius.lg,
+                      marginTop: theme.spacing.lg,
+                    },
+                  ]}
+                  onPress={handleStart}
+                >
+                  <Text
+                    style={[
+                      s.buttonText,
+                      {
+                        color: theme.colors.textOnPrimary,
+                      },
+                    ]}
+                  >
+                    Start Challenge
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
 
-          {!isRunning && stabilityScore > 0 && !submitted ? (
-            <TouchableOpacity
-              style={[
-                s.button,
-                {
-                  backgroundColor: theme.colors.success,
-                  borderRadius: theme.radius.lg,
-                  marginTop: theme.spacing.md,
-                },
-              ]}
-              onPress={handleSubmit}
-            >
-              <Text
-                style={[
-                  s.buttonText,
-                  {
-                    color: theme.colors.textOnPrimary,
-                  },
-                ]}
-              >
-                Submit & see results
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+              {!isRunning && stabilityScore > 0 && !submitted ? (
+                <TouchableOpacity
+                  style={[
+                    s.button,
+                    {
+                      backgroundColor: theme.colors.success,
+                      borderRadius: theme.radius.lg,
+                      marginTop: theme.spacing.md,
+                    },
+                  ]}
+                  onPress={handleSubmit}
+                >
+                  <Text
+                    style={[
+                      s.buttonText,
+                      {
+                        color: theme.colors.textOnPrimary,
+                      },
+                    ]}
+                  >
+                    Submit & see results
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {submitted ? (
+                <Text
+                  style={[
+                    s.p,
+                    {
+                      color: theme.colors.textMuted,
+                      fontSize: theme.fontSize.sm,
+                      marginTop: theme.spacing.lg,
+                      textAlign: "center",
+                    },
+                  ]}
+                >
+                  Submitted. Tap the Results tab to see your score.
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
       }
       results={
@@ -380,21 +431,6 @@ export default function HumanPerformance() {
                 {stabilityScore}
               </Text>
 
-              <Text
-                style={[
-                  s.p,
-                  {
-                    color: theme.colors.textMuted,
-                    textAlign: "center",
-                    marginTop: theme.spacing.sm,
-                    fontSize: theme.fontSize.lg,
-                    fontWeight: "600",
-                  },
-                ]}
-              >
-                {performanceLevel}
-              </Text>
-
               <View
                 style={[
                   s.cards,
@@ -411,48 +447,70 @@ export default function HumanPerformance() {
                   value={String(stabilityScore)}
                   unit="/100"
                 />
+
+                <MetricCard label="Performance" value={performanceLevel} />
               </View>
+
+              {!sentToLeaderboard ? (
+                <TouchableOpacity
+                  style={[
+                    s.cta,
+                    {
+                      backgroundColor: theme.colors.accent,
+                      borderRadius: theme.radius.lg,
+                      paddingVertical: theme.spacing.md,
+                      marginTop: theme.spacing.lg,
+                      opacity: sending ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={handleSendToLeaderboard}
+                  disabled={sending}
+                >
+                  {sending ? (
+                    <ActivityIndicator color={theme.colors.textOnPrimary} />
+                  ) : (
+                    <Text
+                      style={[
+                        s.buttonText,
+                        { color: theme.colors.textOnPrimary },
+                      ]}
+                    >
+                      Send to leaderboard 🏆
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[
+                    s.p,
+                    {
+                      color: theme.colors.success,
+                      textAlign: "center",
+                      marginTop: theme.spacing.lg,
+                      fontSize: theme.fontSize.md,
+                    },
+                  ]}
+                >
+                  ✓ Sent to leaderboard
+                </Text>
+              )}
 
               <TouchableOpacity
                 onPress={handleTryAgain}
-                style={{
-                  marginTop: theme.spacing.lg,
-                }}
+                style={{ marginTop: theme.spacing.md }}
               >
                 <Text
                   style={[
                     s.p,
                     {
                       color: theme.colors.primarySoft,
+                      fontSize: theme.fontSize.sm,
                       textAlign: "center",
                       textDecorationLine: "underline",
                     },
                   ]}
                 >
                   Try again
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  s.button,
-                  {
-                    backgroundColor: theme.colors.primary,
-                    borderRadius: theme.radius.lg,
-                    marginTop: theme.spacing.md,
-                  },
-                ]}
-                onPress={() => router.push("/leaderboard")}
-              >
-                <Text
-                  style={[
-                    s.buttonText,
-                    {
-                      color: theme.colors.textOnPrimary,
-                    },
-                  ]}
-                >
-                  View Leaderboard
                 </Text>
               </TouchableOpacity>
             </View>
@@ -547,6 +605,10 @@ const s = StyleSheet.create({
 
   cards: {
     flexDirection: "column",
+  },
+
+  cta: {
+    alignItems: "center",
   },
 
   textarea: {
