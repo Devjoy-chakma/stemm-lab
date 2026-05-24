@@ -189,6 +189,17 @@ export default function Leaderboard() {
 
                     borderRadius: theme.radius.xl,
 
+                    borderWidth: 1,
+
+                    borderColor:
+                      index === 0
+                        ? "#A88A2A"
+                        : index === 1
+                        ? "#7E8B99"
+                        : index === 2
+                        ? "#8A5A3B"
+                        : theme.colors.borderStrong,
+
                     shadowColor: "#000",
                     shadowOffset: {
                       width: 0,
