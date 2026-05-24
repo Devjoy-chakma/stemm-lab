@@ -41,7 +41,7 @@ export async function createTeamSession(input: CreateTeamInput) {
       team_pin,
       created_at,
       ended_at
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       input.userId,
       input.teamName.trim(),
@@ -73,5 +73,37 @@ export async function createTeamSession(input: CreateTeamInput) {
   return {
     teamId,
     discriminator,
+  };
+}
+
+export async function findTeamByCredentials(teamName: string, teamPin: string) {
+  const db = await getDatabase();
+
+  const team = await db.getFirstAsync<any>(
+    `
+    SELECT *
+    FROM teams
+    WHERE team_name = ?
+      AND team_pin = ?
+    `,
+    [teamName.trim(), teamPin]
+  );
+
+  if (!team) {
+    return null;
+  }
+
+  const members = await db.getAllAsync<any>(
+    `
+      SELECT *
+      FROM team_members
+      WHERE team_id = ?
+      `,
+    [team.team_id]
+  );
+
+  return {
+    ...team,
+    members,
   };
 }
