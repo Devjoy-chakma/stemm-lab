@@ -148,11 +148,11 @@ export default function Leaderboard() {
                   {
                     backgroundColor:
                       index === 0
-                        ? theme.colors.accent
+                        ? "#CBB06A"
                         : index === 1
-                        ? "#D9DDE3"
+                        ? "#AEB8C2"
                         : index === 2
-                        ? "#D6B38A"
+                        ? "#B98D6F"
                         : theme.colors.surface,
 
                     borderRadius: theme.radius.xl,
@@ -176,11 +176,11 @@ export default function Leaderboard() {
                       {
                         backgroundColor:
                           index === 0
-                            ? theme.colors.primary
+                            ? "#DCC98A"
                             : index === 1
-                            ? "#7B8794"
+                            ? "#C5CED8"
                             : index === 2
-                            ? "#8C6239"
+                            ? "#CDAF98"
                             : theme.colors.surfaceMuted,
                       },
                     ]}
