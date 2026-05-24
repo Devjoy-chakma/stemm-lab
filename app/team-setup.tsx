@@ -23,7 +23,7 @@ export default function TeamSetup() {
 
   const [teamName, setTeamName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("");
-  const [members, setMembers] = useState([""]);
+  const [members, setMembers] = useState(["",""]);
   const [isSaving, setIsSaving] = useState(false);
 
   function updateMember(index: number, value: string) {
@@ -175,7 +175,7 @@ export default function TeamSetup() {
               },
             ]}
           >
-            Grade level 3–9
+            Grade level (3–9)
           </Text>
 
           <TextInput
