@@ -11,18 +11,42 @@ import {
 import { getLeaderboard } from "../src/database/repositories/attemptRepository";
 import { useTheme } from "../src/theme";
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  parachute: "🪂 Parachute Drop",
+const ACTIVITY_META: Record<
+  string,
+  {
+    icon: string;
+    label: string;
+  }
+> = {
+  parachute: {
+    icon: "🪂",
+    label: "Parachute Drop",
+  },
 
-  sound: "🔊 Sound Pollution",
+  sound: {
+    icon: "🔊",
+    label: "Sound Pollution",
+  },
 
-  "hand-fan": "🪭 Hand Fan",
+  "hand-fan": {
+    icon: "🪭",
+    label: "Hand Fan",
+  },
 
-  "human-perf": "⚖️ Human Performance",
+  "human-perf": {
+    icon: "🏃",
+    label: "Human Performance",
+  },
 
-  reaction: "⚡ Reaction Board",
+  reaction: {
+    icon: "⚡",
+    label: "Reaction Board",
+  },
 
-  breathing: "🫁 Breathing Pace",
+  breathing: {
+    icon: "🫁",
+    label: "Breathing Pace",
+  },
 };
 
 export default function Leaderboard() {
@@ -263,16 +287,29 @@ export default function Leaderboard() {
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.activityText,
-                      {
-                        color: theme.colors.primary,
-                      },
-                    ]}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
                   >
-                    {ACTIVITY_LABELS[item.activity_id] ?? item.activity_id}
-                  </Text>
+                    <Text style={{ fontSize: 14 }}>
+                      {ACTIVITY_META[item.activity_id]?.icon}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.activityText,
+                        {
+                          color: theme.colors.primary,
+                          marginLeft: 6,
+                        },
+                      ]}
+                    >
+                      {ACTIVITY_META[item.activity_id]?.label ??
+                        item.activity_id}
+                    </Text>
+                  </View>
                 </View>
               </View>
             );
