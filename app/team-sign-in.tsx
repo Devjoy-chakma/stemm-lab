@@ -72,6 +72,7 @@ export default function TeamSignIn() {
         created_at: Date.now(),
       });
 
+      router.dismissAll();
       router.replace("/home");
     } catch (error) {
       console.error("Failed to sign in:", error);

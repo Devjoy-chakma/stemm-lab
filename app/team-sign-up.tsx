@@ -114,7 +114,7 @@ export default function TeamSignUp() {
         })),
         created_at: Date.now(),
       });
-
+      router.dismissAll();
       router.replace("/home");
     } catch (error) {
       console.error("Failed to create team:", error);
