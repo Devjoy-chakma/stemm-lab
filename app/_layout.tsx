@@ -15,7 +15,14 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
         }}
-      />
+      >
+        <Stack.Screen
+          name="team-sign-in"
+          options={{
+            gestureEnabled: false,
+          }}
+        />
+      </Stack>
     </ThemeProvider>
   );
 }
