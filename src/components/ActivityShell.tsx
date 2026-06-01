@@ -146,18 +146,6 @@ export default function ActivityShell({
       >
         {renderActiveTab()}
       </ScrollView>
-
-      {/* DEBUG FOOTER — temporary, remove later */}
-      <View
-        style={[
-          styles.debugFooter,
-          { backgroundColor: theme.colors.surfaceMuted, padding: theme.spacing.xs },
-        ]}
-      >
-        <Text style={[styles.debugText, { color: theme.colors.textMuted }]}>
-          {activity_id} · {activeTab}
-        </Text>
-      </View>
     </SafeAreaView>
   );
 }
@@ -195,6 +183,4 @@ const styles = StyleSheet.create({
   tabLabel: {},
   content: { flex: 1 },
   contentInner: { paddingBottom: 40 },
-  debugFooter: { alignItems: 'center' },
-  debugText: { fontSize: 11 },
 });
