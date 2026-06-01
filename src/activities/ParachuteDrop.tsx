@@ -14,7 +14,11 @@ import MetricCard from '../components/MetricCard';
 import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
-import { calculateParachuteResult, calculateImprovement } from '../lib/parachuteScore';
+import {
+  calculateParachuteResult,
+  calculateImprovement,
+  DEFAULT_TOY_MASS_KG,
+} from '../lib/parachuteScore';
 
 export default function ParachuteDrop() {
   const { theme } = useTheme();
@@ -29,6 +33,8 @@ export default function ParachuteDrop() {
   const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
 
   const [dropHeight, setDropHeight] = useState<string>('2');
+  const [toyMass, setToyMass] = useState<string>(String(DEFAULT_TOY_MASS_KG));
+  const [contactTime, setContactTime] = useState<string>('');
   const [attempts, setAttempts] = useState<number[]>([]);
   const [writeUpText, setWriteUpTextLocal] = useState<string>('');
   const [submitted, setSubmitted] = useState(false);
@@ -51,10 +57,23 @@ export default function ParachuteDrop() {
   // ---- Submit ----
   const handleSubmit = () => {
     const heightNum = parseFloat(dropHeight) || 0;
-    const result = calculateParachuteResult(heightNum, attempts);
+    const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
+    const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
+    const result = calculateParachuteResult(
+      heightNum,
+      attempts,
+      massNum,
+      contactNum
+    );
     if (!result) return;
 
-    updateRawData({ heightNum, attempts, ...result });
+    updateRawData({
+      heightNum,
+      massKg: massNum,
+      contactTimeSeconds: contactNum,
+      attempts,
+      ...result,
+    });
     setScore(result.dragScore);
     finishAttempt();
     setSubmitted(true);
@@ -96,12 +115,19 @@ export default function ParachuteDrop() {
 
   // ---- Computed values ----
   const heightNum = parseFloat(dropHeight) || 0;
+  const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
+  const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
   const hasAllAttempts = attempts.length >= 3;
 
-  const computed = calculateParachuteResult(heightNum, attempts);
+  const computed = calculateParachuteResult(
+    heightNum,
+    attempts,
+    massNum,
+    contactNum
+  );
   const avgTime = computed?.avgTime ?? 0;
   const velocity = computed?.velocity ?? 0;
-  const gForce = computed?.gForce ?? 0;
+  const impactGForce = computed?.impactGForce ?? null;
   const dragForce = computed?.dragForce ?? 0;
   const dragScore = computed?.dragScore ?? 0;
 
@@ -170,6 +196,65 @@ export default function ParachuteDrop() {
             />
             <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
               meters
+            </Text>
+          </View>
+
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Toy mass
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
+              style={[
+                s.input,
+                {
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
+                },
+              ]}
+              value={toyMass}
+              onChangeText={setToyMass}
+              keyboardType="decimal-pad"
+              placeholder="0.20"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              kg
+            </Text>
+          </View>
+
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Contact time (optional)
+          </Text>
+          <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.xs }]}>
+            Measured from slow-mo replay; leave blank to skip impact g-force.
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
+              style={[
+                s.input,
+                {
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
+                },
+              ]}
+              value={contactTime}
+              onChangeText={setContactTime}
+              keyboardType="decimal-pad"
+              placeholder="0.05"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              seconds
             </Text>
           </View>
 
@@ -274,8 +359,10 @@ export default function ParachuteDrop() {
 
               <View style={[s.cards, { marginTop: theme.spacing.lg, gap: theme.spacing.sm }]}>
                 <MetricCard label="Impact velocity" value={velocity.toFixed(2)} unit="m/s" />
-                <MetricCard label="G-force" value={gForce.toFixed(2)} unit="g" />
                 <MetricCard label="Drag force" value={dragForce.toFixed(2)} unit="N" />
+                {impactGForce !== null ? (
+                  <MetricCard label="Impact g-force" value={impactGForce.toFixed(2)} unit="g" />
+                ) : null}
               </View>
 
               {!sentToLeaderboard ? (

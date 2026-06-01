@@ -14,7 +14,9 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
+import { calculateBreathingResult } from "../lib/breathingScore";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
@@ -31,6 +33,9 @@ export default function BreathingPace() {
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const current = useAttemptStore((s) => s.current);
+  const getPreviousAttemptForActivity = useAttemptStore(
+    (s) => s.getPreviousAttemptForActivity
+  );
 
   const [isRunning, setIsRunning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(SESSION_DURATION);
@@ -111,17 +116,20 @@ export default function BreathingPace() {
   const finishSession = () => {
     setIsRunning(false);
 
-    const score = 100;
+    const completed = SESSION_DURATION - secondsLeft;
+    const result = calculateBreathingResult(completed, SESSION_DURATION);
+    if (!result) return;
 
     updateRawData({
-      duration: SESSION_DURATION,
-      breathingCycles: 4,
-      focusScore: "Excellent",
-      completedSession: true,
+      duration: result.duration_completed_seconds,
+      target_duration: SESSION_DURATION,
+      breathingCycles: result.breathing_cycles,
+      completionPercent: result.completion_percent,
+      focusLevel: result.focus_level,
+      completedSession: result.completion_percent >= 100,
     });
 
-    setScore(score);
-
+    setScore(result.completion_score);
     finishAttempt();
   };
 
@@ -178,6 +186,22 @@ export default function BreathingPace() {
 
     setWriteUp(text);
   };
+
+  // Result derived from the pure scoring lib — keeps the displayed
+  // metrics in sync with the persisted attempt score.
+  const durationCompleted = SESSION_DURATION - secondsLeft;
+  const breathingResult = calculateBreathingResult(
+    durationCompleted,
+    SESSION_DURATION
+  );
+  const completionScore = breathingResult?.completion_score ?? 0;
+  const breathingCycles = breathingResult?.breathing_cycles ?? 0;
+  const focusLevel = breathingResult?.focus_level ?? "Incomplete";
+
+  // Improvement vs the team's previous attempt at this activity.
+  const previous = getPreviousAttemptForActivity("breathing");
+  const previousScore = previous?.score ?? null;
+  const improvement = calculateImprovement(completionScore, previousScore);
 
   const briefSpeechText =
     "Follow the breathing guide by inhaling and exhaling slowly. " +
@@ -390,8 +414,41 @@ export default function BreathingPace() {
                   },
                 ]}
               >
-                100
+                {completionScore}
               </Text>
+
+              {improvement !== null ? (
+                <View
+                  style={[
+                    s.badge,
+                    {
+                      backgroundColor:
+                        improvement >= 0
+                          ? theme.colors.success
+                          : theme.colors.warning,
+                      borderRadius: theme.radius.md,
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      alignSelf: "center",
+                      marginTop: theme.spacing.md,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.badgeText,
+                      {
+                        color: theme.colors.textOnPrimary,
+                        fontSize: theme.fontSize.sm,
+                      },
+                    ]}
+                  >
+                    {improvement >= 0 ? "↑" : "↓"} {Math.abs(improvement)}%{" "}
+                    {improvement >= 0 ? "better than" : "compared to"} last
+                    attempt
+                  </Text>
+                </View>
+              ) : null}
 
               <View
                 style={[
@@ -404,13 +461,16 @@ export default function BreathingPace() {
               >
                 <MetricCard
                   label="Session Time"
-                  value={String(SESSION_DURATION)}
+                  value={durationCompleted.toFixed(0)}
                   unit="s"
                 />
 
-                <MetricCard label="Breathing Cycles" value="4" />
+                <MetricCard
+                  label="Breathing Cycles"
+                  value={String(breathingCycles)}
+                />
 
-                <MetricCard label="Focus Score" value="Excellent" />
+                <MetricCard label="Focus Score" value={focusLevel} />
               </View>
 
               {!sentToLeaderboard ? (
@@ -581,6 +641,12 @@ const s = StyleSheet.create({
     fontSize: 96,
     fontWeight: "700",
     textAlign: "center",
+  },
+
+  badge: {},
+
+  badgeText: {
+    fontWeight: "700",
   },
 
   cards: {
