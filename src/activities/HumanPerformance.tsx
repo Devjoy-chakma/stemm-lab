@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   StyleSheet,
   Text,
   TextInput,
@@ -13,19 +15,27 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
-import { calculateHumanPerformanceResult } from "../lib/humanPerformanceScore";
+import {
+  calculateHumanPerformanceResult,
+  HumanPerformanceResult,
+} from "../lib/humanPerformanceScore";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
+const SESSION_DURATION_MS = 12_000;
+const HALF_CYCLE_MS = 2_000;       // 2 s grow + 2 s shrink = one cycle
+const CYCLE_DURATION_MS = HALF_CYCLE_MS * 2;
+const TOTAL_CYCLES = SESSION_DURATION_MS / CYCLE_DURATION_MS;
+const ACCEL_SAMPLE_INTERVAL_MS = 100;
+const COUNTDOWN_TICK_MS = 100;
+
 export default function HumanPerformance() {
   const { theme } = useTheme();
 
   const team = useTeamStore((s) => s.team);
-
   const current = useAttemptStore((s) => s.current);
-
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
@@ -36,114 +46,118 @@ export default function HumanPerformance() {
   );
 
   const [isRunning, setIsRunning] = useState(false);
-  const [countdown, setCountdown] = useState(10);
-
-  const [movementScore, setMovementScore] = useState(0);
-  const [stabilityScore, setStabilityScore] = useState(0);
-  const [performanceLevel, setPerformanceLevel] = useState("");
+  const [secondsLeft, setSecondsLeft] = useState(
+    SESSION_DURATION_MS / 1000
+  );
+  const [result, setResult] = useState<HumanPerformanceResult | null>(null);
 
   const [submitted, setSubmitted] = useState(false);
-
   const [sending, setSending] = useState(false);
   const [sentToLeaderboard, setSentToLeaderboard] = useState(false);
-
   const [writeUpText, setWriteUpTextLocal] = useState("");
 
-  const movementSamples = useRef<number[]>([]);
+  const magnitudesRef = useRef<number[]>([]);
+  const sessionStartedAtRef = useRef(0);
+  const guideAnim = useRef(new Animated.Value(0)).current;
+  const guideLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  const previousReading = useRef({
-    x: 0,
-    y: 0,
-    z: 0,
-  });
-
+  // ---- Init / cleanup ----
   useEffect(() => {
     const teamId = team?.team_id ?? "demo-team";
     startAttempt(teamId, "human-perf");
+    return () => {
+      if (guideLoopRef.current) guideLoopRef.current.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Accelerometer listener
+  // ---- Accelerometer subscription (active only while running) ----
   useEffect(() => {
-    let subscription: any;
-
-    if (isRunning) {
-      Accelerometer.setUpdateInterval(200);
-
-      subscription = Accelerometer.addListener((data) => {
-        const dx = Math.abs(data.x - previousReading.current.x);
-        const dy = Math.abs(data.y - previousReading.current.y);
-        const dz = Math.abs(data.z - previousReading.current.z);
-
-        const movement = dx + dy + dz;
-
-        movementSamples.current.push(movement);
-
-        previousReading.current = data;
-      });
-    }
-
-    return () => {
-      subscription?.remove();
-    };
+    if (!isRunning) return;
+    Accelerometer.setUpdateInterval(ACCEL_SAMPLE_INTERVAL_MS);
+    const sub = Accelerometer.addListener((data) => {
+      const mag = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+      magnitudesRef.current.push(mag);
+    });
+    return () => sub.remove();
   }, [isRunning]);
 
-  // Timer
+  // ---- Countdown using wall-clock time (drift-free) ----
   useEffect(() => {
-    let interval: any;
-
-    if (isRunning && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-    }
-
-    if (countdown === 0 && isRunning) {
-      finishChallenge();
-    }
-
+    if (!isRunning) return;
+    sessionStartedAtRef.current = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - sessionStartedAtRef.current;
+      const remaining = Math.max(
+        0,
+        (SESSION_DURATION_MS - elapsed) / 1000
+      );
+      setSecondsLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        finishSession();
+      }
+    }, COUNTDOWN_TICK_MS);
     return () => clearInterval(interval);
-  }, [isRunning, countdown]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
-  const handleStart = () => {
-    movementSamples.current = [];
-
-    previousReading.current = {
-      x: 0,
-      y: 0,
-      z: 0,
+  // ---- Guide animation (pulsing circle) ----
+  useEffect(() => {
+    if (!isRunning) {
+      if (guideLoopRef.current) guideLoopRef.current.stop();
+      return;
+    }
+    guideAnim.setValue(0);
+    guideLoopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(guideAnim, {
+          toValue: 1,
+          duration: HALF_CYCLE_MS,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(guideAnim, {
+          toValue: 0,
+          duration: HALF_CYCLE_MS,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+      ]),
+      { iterations: TOTAL_CYCLES }
+    );
+    guideLoopRef.current.start();
+    return () => {
+      if (guideLoopRef.current) guideLoopRef.current.stop();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
-    setCountdown(10);
-
-    setSubmitted(false);
-
-    setMovementScore(0);
-    setStabilityScore(0);
-
-    setPerformanceLevel("");
-
+  // ---- Session control ----
+  const startSession = () => {
+    magnitudesRef.current = [];
+    setResult(null);
+    setSecondsLeft(SESSION_DURATION_MS / 1000);
     setIsRunning(true);
   };
 
-  const finishChallenge = () => {
+  const finishSession = () => {
     setIsRunning(false);
-
-    const result = calculateHumanPerformanceResult(movementSamples.current);
-    if (!result) return;
-
-    setMovementScore(result.avg_movement);
-    setStabilityScore(result.stability_score);
-    setPerformanceLevel(result.performance_level);
+    const r = calculateHumanPerformanceResult(magnitudesRef.current);
+    setResult(r);
+    if (!r) return;
 
     updateRawData({
-      movementScore: result.avg_movement,
-      stabilityScore: result.stability_score,
-      performanceLevel: result.performance_level,
-      duration: 10,
-      samplesCollected: result.samples_collected,
+      acceleration_magnitudes: magnitudesRef.current,
+      average_jerk: r.average_jerk,
+      range_of_motion: r.range_of_motion,
+      smoothness_score: r.smoothness_score,
+      performance_level: r.performance_level,
+      samples_collected: r.samples_collected,
+      duration_ms: SESSION_DURATION_MS,
+      total_cycles: TOTAL_CYCLES,
     });
-
-    setScore(result.stability_score);
+    setScore(r.smoothness_score);
     finishAttempt();
   };
 
@@ -151,19 +165,30 @@ export default function HumanPerformance() {
     setSubmitted(true);
   };
 
+  const handleTryAgain = () => {
+    setResult(null);
+    setSubmitted(false);
+    setSending(false);
+    setSentToLeaderboard(false);
+    setIsRunning(false);
+    setSecondsLeft(SESSION_DURATION_MS / 1000);
+    setWriteUpTextLocal("");
+    setWriteUp("");
+    magnitudesRef.current = [];
+    const teamId = team?.team_id ?? "demo-team";
+    startAttempt(teamId, "human-perf");
+  };
+
   const handleSendToLeaderboard = async () => {
     if (!team) {
       Alert.alert("No team set", "Set up a team first.");
       return;
     }
-
     if (!current) {
       Alert.alert("No attempt", "Submit your run first.");
       return;
     }
-
     setSending(true);
-
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
@@ -175,64 +200,44 @@ export default function HumanPerformance() {
     }
   };
 
-  const handleTryAgain = () => {
-    movementSamples.current = [];
-
-    previousReading.current = {
-      x: 0,
-      y: 0,
-      z: 0,
-    };
-
-    setCountdown(10);
-    setSubmitted(false);
-    setSending(false);
-    setSentToLeaderboard(false);
-
-    setMovementScore(0);
-    setStabilityScore(0);
-    setPerformanceLevel("");
-
-    setWriteUpTextLocal("");
-    setWriteUp("");
-
-    const teamId = team?.team_id ?? "demo-team";
-    startAttempt(teamId, "human-perf");
-  };
-
   const handleWriteUpChange = (text: string) => {
     setWriteUpTextLocal(text);
     setWriteUp(text);
   };
 
-  // Comparison vs the team's previous attempt at this activity.
+  // ---- Computed ----
+  const smoothnessScore = result?.smoothness_score ?? 0;
+
   const previous = getPreviousAttemptForActivity("human-perf");
   const previousScore = previous?.score ?? null;
-  const improvement = calculateImprovement(stabilityScore, previousScore);
+  const improvement = calculateImprovement(smoothnessScore, previousScore);
 
   const briefSpeechText =
-    "Hold your phone as steady as possible for 10 seconds. " +
-    "The phone sensors measure your movement and balance.";
+    "Hold the phone in one hand and follow the pulsing dot. " +
+    "Raise your arm as the dot grows, lower it as the dot shrinks. " +
+    "Move smoothly — jerky motion lowers your score.";
+
+  // The animated dot scales from 0.5× to 1.5× over each half-cycle.
+  const dotScale = guideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.5, 1.5],
+  });
 
   return (
     <ActivityShell
       activity_id="human-perf"
-      title="Human Performance"
+      title="Human Performance Lab"
       briefSpeechText={briefSpeechText}
       brief={
         <View>
           <Text
             style={[
               s.h,
-              {
-                color: theme.colors.primary,
-                fontSize: theme.fontSize.xl,
-              },
+              { color: theme.colors.primary, fontSize: theme.fontSize.xl },
             ]}
           >
-            What you'll do
+            What you&apos;ll do
           </Text>
-
           <Text
             style={[
               s.p,
@@ -256,9 +261,8 @@ export default function HumanPerformance() {
               },
             ]}
           >
-            What you need
+            How scoring works
           </Text>
-
           <Text
             style={[
               s.p,
@@ -269,131 +273,170 @@ export default function HumanPerformance() {
               },
             ]}
           >
-            • A phone{"\n"}• A steady hand{"\n"}• Open standing space
+            The phone&apos;s accelerometer records how steady your motion is.
+            Smooth, even movement scores higher than jerky stop-start motion.
+            We also show the range of your movement.
           </Text>
-        </View>
-      }
-      run={
-        <View>
+
           <Text
             style={[
               s.h,
               {
                 color: theme.colors.primary,
                 fontSize: theme.fontSize.xl,
-                textAlign: "center",
+                marginTop: theme.spacing.lg,
               },
             ]}
           >
-            Balance Challenge
+            What you need
           </Text>
-
           <Text
             style={[
-              s.timer,
+              s.p,
               {
-                color: theme.colors.primary,
+                color: theme.colors.text,
+                fontSize: theme.fontSize.md,
+                marginTop: theme.spacing.sm,
               },
             ]}
           >
-            {countdown}s
+            • Open space to move your arm safely{"\n"}
+            • Hold the phone firmly{"\n"}
+            • {SESSION_DURATION_MS / 1000} seconds, {TOTAL_CYCLES} arm-raise cycles
           </Text>
-
+        </View>
+      }
+      run={
+        <View>
           {isRunning ? (
+            <View style={s.center}>
+              <Animated.View
+                style={[
+                  s.guideDot,
+                  {
+                    backgroundColor: theme.colors.primarySoft,
+                    transform: [{ scale: dotScale }],
+                  },
+                ]}
+              />
+              <Text
+                style={[
+                  s.timer,
+                  {
+                    color: theme.colors.primary,
+                    marginTop: theme.spacing.xl,
+                  },
+                ]}
+              >
+                {secondsLeft.toFixed(1)}s
+              </Text>
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.textMuted,
+                    fontSize: theme.fontSize.md,
+                    marginTop: theme.spacing.sm,
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                Move with the dot — smoothly, no sudden stops
+              </Text>
+            </View>
+          ) : !result ? (
+            <View>
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.text,
+                    fontSize: theme.fontSize.md,
+                    marginTop: theme.spacing.sm,
+                  },
+                ]}
+              >
+                Get ready to raise and lower your arm in sync with the pulsing dot.
+                Move smoothly; jerky stops lower your score.
+              </Text>
+              <TouchableOpacity
+                style={[
+                  s.button,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    borderRadius: theme.radius.lg,
+                    marginTop: theme.spacing.xl,
+                  },
+                ]}
+                onPress={startSession}
+              >
+                <Text
+                  style={[s.buttonText, { color: theme.colors.textOnPrimary }]}
+                >
+                  Start session
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : !submitted ? (
+            <View>
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.success,
+                    fontSize: theme.fontSize.md,
+                    textAlign: "center",
+                    marginTop: theme.spacing.md,
+                  },
+                ]}
+              >
+                ✓ Session complete — smoothness score {result.smoothness_score}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  s.button,
+                  {
+                    backgroundColor: theme.colors.success,
+                    borderRadius: theme.radius.lg,
+                    marginTop: theme.spacing.lg,
+                  },
+                ]}
+                onPress={handleSubmit}
+              >
+                <Text
+                  style={[s.buttonText, { color: theme.colors.textOnPrimary }]}
+                >
+                  Submit &amp; see results
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
             <Text
               style={[
                 s.p,
                 {
                   color: theme.colors.textMuted,
+                  fontSize: theme.fontSize.sm,
+                  marginTop: theme.spacing.lg,
                   textAlign: "center",
                 },
               ]}
             >
-              Hold your phone steady...
+              Submitted. Tap the Results tab to see your score.
             </Text>
-          ) : (
-            <>
-              {!isRunning && stabilityScore === 0 && !submitted ? (
-                <TouchableOpacity
-                  style={[
-                    s.button,
-                    {
-                      backgroundColor: theme.colors.primary,
-                      borderRadius: theme.radius.lg,
-                      marginTop: theme.spacing.lg,
-                    },
-                  ]}
-                  onPress={handleStart}
-                >
-                  <Text
-                    style={[
-                      s.buttonText,
-                      {
-                        color: theme.colors.textOnPrimary,
-                      },
-                    ]}
-                  >
-                    Start Challenge
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {!isRunning && stabilityScore > 0 && !submitted ? (
-                <TouchableOpacity
-                  style={[
-                    s.button,
-                    {
-                      backgroundColor: theme.colors.success,
-                      borderRadius: theme.radius.lg,
-                      marginTop: theme.spacing.md,
-                    },
-                  ]}
-                  onPress={handleSubmit}
-                >
-                  <Text
-                    style={[
-                      s.buttonText,
-                      {
-                        color: theme.colors.textOnPrimary,
-                      },
-                    ]}
-                  >
-                    Submit & see results
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {submitted ? (
-                <Text
-                  style={[
-                    s.p,
-                    {
-                      color: theme.colors.textMuted,
-                      fontSize: theme.fontSize.sm,
-                      marginTop: theme.spacing.lg,
-                      textAlign: "center",
-                    },
-                  ]}
-                >
-                  Submitted. Tap the Results tab to see your score.
-                </Text>
-              ) : null}
-            </>
           )}
         </View>
       }
       results={
         <View>
-          {!submitted ? (
+          {!submitted || !result ? (
             <Text
               style={[
                 s.p,
-                {
-                  color: theme.colors.textMuted,
-                },
+                { color: theme.colors.textMuted, fontSize: theme.fontSize.md },
               ]}
             >
-              Complete the balance challenge first.
+              Complete the motion session on the Run tab and tap Submit first.
             </Text>
           ) : (
             <View>
@@ -404,10 +447,24 @@ export default function HumanPerformance() {
                     color: theme.colors.primary,
                     fontSize: theme.fontSize.xxl,
                     textAlign: "center",
+                    marginTop: theme.spacing.lg,
                   },
                 ]}
               >
                 Nice work!
+              </Text>
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.textMuted,
+                    fontSize: theme.fontSize.sm,
+                    textAlign: "center",
+                    marginTop: theme.spacing.xs,
+                  },
+                ]}
+              >
+                Smoothness score · {team?.team_name ?? "Your team"}
               </Text>
 
               <Text
@@ -419,7 +476,7 @@ export default function HumanPerformance() {
                   },
                 ]}
               >
-                {stabilityScore}
+                {smoothnessScore}
               </Text>
 
               {improvement !== null ? (
@@ -449,8 +506,7 @@ export default function HumanPerformance() {
                     ]}
                   >
                     {improvement >= 0 ? "↑" : "↓"} {Math.abs(improvement)}%{" "}
-                    {improvement >= 0 ? "better than" : "compared to"} last
-                    attempt
+                    {improvement >= 0 ? "better than" : "compared to"} last attempt
                   </Text>
                 </View>
               ) : null}
@@ -458,21 +514,30 @@ export default function HumanPerformance() {
               <View
                 style={[
                   s.cards,
-                  {
-                    marginTop: theme.spacing.lg,
-                    gap: theme.spacing.sm,
-                  },
+                  { marginTop: theme.spacing.lg, gap: theme.spacing.sm },
                 ]}
               >
-                <MetricCard label="Movement" value={movementScore.toFixed(2)} />
-
                 <MetricCard
-                  label="Stability"
-                  value={String(stabilityScore)}
+                  label="Smoothness"
+                  value={String(result.smoothness_score)}
                   unit="/100"
                 />
-
-                <MetricCard label="Performance" value={performanceLevel} />
+                <MetricCard
+                  label="Average jerk"
+                  value={result.average_jerk.toFixed(3)}
+                />
+                <MetricCard
+                  label="Range of motion"
+                  value={result.range_of_motion.toFixed(3)}
+                />
+                <MetricCard
+                  label="Performance"
+                  value={result.performance_level}
+                />
+                <MetricCard
+                  label="Samples"
+                  value={String(result.samples_collected)}
+                />
               </View>
 
               {!sentToLeaderboard ? (
@@ -546,15 +611,11 @@ export default function HumanPerformance() {
           <Text
             style={[
               s.h,
-              {
-                color: theme.colors.primary,
-                fontSize: theme.fontSize.xl,
-              },
+              { color: theme.colors.primary, fontSize: theme.fontSize.xl },
             ]}
           >
             Reflection
           </Text>
-
           <Text
             style={[
               s.p,
@@ -565,7 +626,9 @@ export default function HumanPerformance() {
               },
             ]}
           >
-            What made balancing difficult? How could you improve your stability?
+            Which movements were easiest to keep smooth? Did your speed change as
+            you got tired? Was your range of motion bigger or smaller than you
+            expected?
           </Text>
 
           <TextInput
@@ -596,53 +659,25 @@ export default function HumanPerformance() {
 }
 
 const s = StyleSheet.create({
-  h: {
-    fontWeight: "700",
+  h: { fontWeight: "700" },
+  p: { lineHeight: 22 },
+  center: { alignItems: "center", marginTop: 30 },
+  guideDot: {
+    width: 140,
+    height: 140,
+    borderRadius: 999,
   },
-
-  p: {
-    lineHeight: 22,
-  },
-
   timer: {
-    fontSize: 72,
+    fontSize: 56,
     fontWeight: "700",
-    textAlign: "center",
-    marginTop: 24,
+    fontVariant: ["tabular-nums"],
   },
-
-  button: {
-    alignItems: "center",
-    paddingVertical: 16,
-  },
-
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  bigScore: {
-    fontSize: 96,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-
+  button: { alignItems: "center", paddingVertical: 16 },
+  buttonText: { fontSize: 16, fontWeight: "600" },
+  bigScore: { fontSize: 96, fontWeight: "700", textAlign: "center" },
   badge: {},
-
-  badgeText: {
-    fontWeight: "700",
-  },
-
-  cards: {
-    flexDirection: "column",
-  },
-
-  cta: {
-    alignItems: "center",
-  },
-
-  textarea: {
-    borderWidth: 1,
-    minHeight: 140,
-  },
+  badgeText: { fontWeight: "700" },
+  cards: { flexDirection: "column" },
+  cta: { alignItems: "center" },
+  textarea: { borderWidth: 1, minHeight: 140 },
 });
