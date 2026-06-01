@@ -1,8 +1,11 @@
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
+  GestureResponderEvent,
+  LayoutChangeEvent,
   StyleSheet,
   Text,
   TextInput,
@@ -15,117 +18,324 @@ import MetricCard from "../components/MetricCard";
 
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { calculateImprovement } from "../lib/parachuteScore";
-import { calculateReactionResult } from "../lib/reactionScore";
+import { calculateReactionBoardResult } from "../lib/reactionScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
 const TOTAL_ROUNDS = 3;
+const INTER_ROUND_DELAY_MS = 1000;
+const MIN_PROMPT_DELAY_MS = 1000;
+const MAX_PROMPT_DELAY_MS = 3000;
+
+const TRACING_AREA_HEIGHT = 220;
+const DOT_SIZE = 64;
+const TRACING_DURATION_MS = 8000;
+const TRACING_SAMPLE_MS = 100;
+const TRACING_OFFSCREEN_PENALTY_PX = 200;
+
+type Phase = 1 | 2 | 3;
+type PhaseStatus = "pending" | "running" | "done";
 
 export default function ReactionBoard() {
   const { theme } = useTheme();
 
-  const router = useRouter();
-
   const team = useTeamStore((s) => s.team);
-
+  const current = useAttemptStore((s) => s.current);
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
-  const current = useAttemptStore((s) => s.current);
   const getPreviousAttemptForActivity = useAttemptStore(
     (s) => s.getPreviousAttemptForActivity
   );
 
-  const [gameStarted, setGameStarted] = useState(false);
+  // ---- Phase state ----
+  const [phase, setPhase] = useState<Phase>(1);
+  const [phaseStatus, setPhaseStatus] = useState<PhaseStatus>("pending");
+
+  // ---- Reaction-phase (1 & 2) state ----
+  const [round, setRound] = useState(1);
   const [waitingForTap, setWaitingForTap] = useState(false);
   const [showTap, setShowTap] = useState(false);
+  const [phase1Times, setPhase1Times] = useState<number[]>([]);
+  const [phase2Times, setPhase2Times] = useState<number[]>([]);
 
-  const [round, setRound] = useState(1);
+  const startTimeRef = useRef(0);
+  const promptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interRoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
-  const [reactionTimes, setReactionTimes] = useState<number[]>([]);
+  // ---- Tracing-phase (3) state ----
+  const [phase3Deviations, setPhase3Deviations] = useState<number[]>([]);
+  const [tracingAreaWidth, setTracingAreaWidth] = useState(0);
+  const [tracingSecondsLeft, setTracingSecondsLeft] = useState(
+    TRACING_DURATION_MS / 1000
+  );
 
+  const dotXAnim = useRef(new Animated.Value(0)).current;
+  const dotXRef = useRef(0);
+  const fingerXRef = useRef(0);
+  const fingerYRef = useRef(0);
+  const fingerActiveRef = useRef(false);
+  const deviationsRef = useRef<number[]>([]);
+  const sampleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const tracingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const tracingCountdownRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const dotListenerIdRef = useRef<string | null>(null);
+
+  // ---- Submit state ----
   const [submitted, setSubmitted] = useState(false);
-
   const [sending, setSending] = useState(false);
   const [sentToLeaderboard, setSentToLeaderboard] = useState(false);
-
   const [writeUpText, setWriteUpTextLocal] = useState("");
 
-  const startTimeRef = useRef<number>(0);
-  const timeoutRef = useRef<any>(null);
-
+  // ---- Mount + cleanup ----
   useEffect(() => {
     const teamId = team?.team_id ?? "demo-team";
     startAttempt(teamId, "reaction");
+
+    return () => {
+      if (promptTimeoutRef.current) clearTimeout(promptTimeoutRef.current);
+      if (interRoundTimeoutRef.current)
+        clearTimeout(interRoundTimeoutRef.current);
+      if (sampleIntervalRef.current) clearInterval(sampleIntervalRef.current);
+      if (tracingTimeoutRef.current) clearTimeout(tracingTimeoutRef.current);
+      if (tracingCountdownRef.current)
+        clearInterval(tracingCountdownRef.current);
+      if (dotListenerIdRef.current)
+        dotXAnim.removeListener(dotListenerIdRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startRound = () => {
+  // =====================================================================
+  // Phase 1 & 2 — reaction rounds
+  // =====================================================================
+
+  const startReactionRound = () => {
     setWaitingForTap(true);
     setShowTap(false);
-
-    const delay = 1000 + Math.random() * 2000;
-
-    timeoutRef.current = setTimeout(() => {
+    const delay =
+      MIN_PROMPT_DELAY_MS +
+      Math.random() * (MAX_PROMPT_DELAY_MS - MIN_PROMPT_DELAY_MS);
+    promptTimeoutRef.current = setTimeout(() => {
       setShowTap(true);
       startTimeRef.current = Date.now();
     }, delay);
   };
 
-  const handleStartGame = () => {
-    setReactionTimes([]);
-    setRound(1);
-    setSubmitted(false);
-
-    setGameStarted(true);
-
-    startRound();
-  };
-
-  const handleTap = () => {
+  const handleReactionTap = () => {
     if (!showTap) return;
-
     const reaction = Date.now() - startTimeRef.current;
-
-    const updated = [...reactionTimes, reaction];
-
-    setReactionTimes(updated);
-
     setShowTap(false);
     setWaitingForTap(false);
 
-    if (round >= TOTAL_ROUNDS) {
-      finishGame(updated);
-    } else {
-      setRound((prev) => prev + 1);
+    const recordAndAdvance = (nextTimes: number[]) => {
+      if (nextTimes.length >= TOTAL_ROUNDS) {
+        setPhaseStatus("done");
+      } else {
+        setRound(nextTimes.length + 1);
+        interRoundTimeoutRef.current = setTimeout(
+          () => startReactionRound(),
+          INTER_ROUND_DELAY_MS
+        );
+      }
+    };
 
-      setTimeout(() => {
-        startRound();
-      }, 1000);
+    if (phase === 1) {
+      setPhase1Times((prev) => {
+        const next = [...prev, reaction];
+        recordAndAdvance(next);
+        return next;
+      });
+    } else if (phase === 2) {
+      setPhase2Times((prev) => {
+        const next = [...prev, reaction];
+        recordAndAdvance(next);
+        return next;
+      });
     }
   };
 
-  const finishGame = (times: number[]) => {
-    setGameStarted(false);
+  const startPhase1 = () => {
+    setPhase1Times([]);
+    setRound(1);
+    setPhaseStatus("running");
+    startReactionRound();
+  };
 
-    const result = calculateReactionResult(times);
+  const advanceToPhase2 = () => {
+    setPhase(2);
+    setPhaseStatus("pending");
+    setRound(1);
+  };
+
+  const startPhase2 = () => {
+    setPhase2Times([]);
+    setRound(1);
+    setPhaseStatus("running");
+    startReactionRound();
+  };
+
+  const advanceToPhase3 = () => {
+    setPhase(3);
+    setPhaseStatus("pending");
+    setTracingSecondsLeft(TRACING_DURATION_MS / 1000);
+  };
+
+  // =====================================================================
+  // Phase 3 — tracing
+  // =====================================================================
+
+  const handleTracingAreaLayout = (e: LayoutChangeEvent) => {
+    setTracingAreaWidth(e.nativeEvent.layout.width);
+  };
+
+  const handleTracingTouchStart = (e: GestureResponderEvent) => {
+    fingerActiveRef.current = true;
+    fingerXRef.current = e.nativeEvent.locationX;
+    fingerYRef.current = e.nativeEvent.locationY;
+  };
+
+  const handleTracingTouchMove = (e: GestureResponderEvent) => {
+    fingerActiveRef.current = true;
+    fingerXRef.current = e.nativeEvent.locationX;
+    fingerYRef.current = e.nativeEvent.locationY;
+  };
+
+  const handleTracingTouchEnd = () => {
+    fingerActiveRef.current = false;
+  };
+
+  const startPhase3 = () => {
+    deviationsRef.current = [];
+    setPhase3Deviations([]);
+    setPhaseStatus("running");
+    setTracingSecondsLeft(TRACING_DURATION_MS / 1000);
+
+    dotXAnim.setValue(0);
+    dotListenerIdRef.current = dotXAnim.addListener(({ value }) => {
+      dotXRef.current = value;
+    });
+
+    // 4-second sweep right then 4-second sweep back = 8s total
+    Animated.sequence([
+      Animated.timing(dotXAnim, {
+        toValue: 1,
+        duration: TRACING_DURATION_MS / 2,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: false,
+      }),
+      Animated.timing(dotXAnim, {
+        toValue: 0,
+        duration: TRACING_DURATION_MS / 2,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    // Sample deviation every TRACING_SAMPLE_MS
+    sampleIntervalRef.current = setInterval(() => {
+      const width = tracingAreaWidth;
+      if (!fingerActiveRef.current || width <= 0) {
+        deviationsRef.current.push(TRACING_OFFSCREEN_PENALTY_PX);
+        return;
+      }
+      const dotCenterX =
+        dotXRef.current * (width - DOT_SIZE) + DOT_SIZE / 2;
+      const dotCenterY = TRACING_AREA_HEIGHT / 2;
+      const dx = fingerXRef.current - dotCenterX;
+      const dy = fingerYRef.current - dotCenterY;
+      deviationsRef.current.push(Math.sqrt(dx * dx + dy * dy));
+    }, TRACING_SAMPLE_MS);
+
+    // Visible countdown
+    const startedAt = Date.now();
+    tracingCountdownRef.current = setInterval(() => {
+      const remaining = Math.max(
+        0,
+        (TRACING_DURATION_MS - (Date.now() - startedAt)) / 1000
+      );
+      setTracingSecondsLeft(remaining);
+    }, 100);
+
+    // End after duration
+    tracingTimeoutRef.current = setTimeout(() => {
+      if (sampleIntervalRef.current) {
+        clearInterval(sampleIntervalRef.current);
+        sampleIntervalRef.current = null;
+      }
+      if (tracingCountdownRef.current) {
+        clearInterval(tracingCountdownRef.current);
+        tracingCountdownRef.current = null;
+      }
+      if (dotListenerIdRef.current) {
+        dotXAnim.removeListener(dotListenerIdRef.current);
+        dotListenerIdRef.current = null;
+      }
+      setTracingSecondsLeft(0);
+      setPhase3Deviations([...deviationsRef.current]);
+      setPhaseStatus("done");
+    }, TRACING_DURATION_MS);
+  };
+
+  // =====================================================================
+  // Submit / leaderboard / write-up
+  // =====================================================================
+
+  const handleSubmit = () => {
+    const result = calculateReactionBoardResult(
+      phase1Times,
+      phase2Times,
+      phase3Deviations
+    );
     if (!result) return;
 
     updateRawData({
-      reactionTimes: result.reaction_times,
-      averageReaction: result.average_ms,
-      fastestReaction: result.fastest_ms,
-      reactionScore: result.reaction_score,
-      rounds: TOTAL_ROUNDS,
+      phase1_times_ms: result.phase1.reaction_times,
+      phase1_average_ms: result.phase1.average_ms,
+      phase1_fastest_ms: result.phase1.fastest_ms,
+      phase1_score: result.phase1.reaction_score,
+      phase2_times_ms: result.phase2.reaction_times,
+      phase2_average_ms: result.phase2.average_ms,
+      phase2_fastest_ms: result.phase2.fastest_ms,
+      phase2_score: result.phase2.reaction_score,
+      phase3_deviations_px: result.phase3.deviations_px,
+      phase3_average_deviation_px: result.phase3.average_deviation_px,
+      phase3_score: result.phase3.tracing_score,
+      hand_diff_ms: result.hand_diff_ms,
+      overall_score: result.overall_score,
+      rounds_per_reaction_phase: TOTAL_ROUNDS,
     });
-
-    setScore(result.reaction_score);
+    setScore(result.overall_score);
     finishAttempt();
+    setSubmitted(true);
   };
 
-  const handleSubmit = () => {
-    setSubmitted(true);
+  const handleTryAgain = () => {
+    setPhase(1);
+    setPhaseStatus("pending");
+    setRound(1);
+    setPhase1Times([]);
+    setPhase2Times([]);
+    setPhase3Deviations([]);
+    setWaitingForTap(false);
+    setShowTap(false);
+    setSubmitted(false);
+    setSending(false);
+    setSentToLeaderboard(false);
+    setWriteUpTextLocal("");
+    setWriteUp("");
+    const teamId = team?.team_id ?? "demo-team";
+    startAttempt(teamId, "reaction");
   };
 
   const handleSendToLeaderboard = async () => {
@@ -133,19 +343,14 @@ export default function ReactionBoard() {
       Alert.alert("No team set", "Set up a team first.");
       return;
     }
-
     if (!current) {
       Alert.alert("No attempt", "Submit your run first.");
       return;
     }
-
     setSending(true);
-
     try {
       await sendToLeaderboard(current, team);
-
       setSentToLeaderboard(true);
-
       Alert.alert("Sent!", "Your score is on the leaderboard.");
     } catch (e: any) {
       Alert.alert("Send failed", e.message ?? "Unknown error");
@@ -154,48 +359,312 @@ export default function ReactionBoard() {
     }
   };
 
-  const handleTryAgain = () => {
-    setReactionTimes([]);
-
-    setRound(1);
-
-    setSubmitted(false);
-
-    setSending(false);
-    setSentToLeaderboard(false);
-
-    setGameStarted(false);
-    setWaitingForTap(false);
-    setShowTap(false);
-
-    setWriteUp("");
-    setWriteUpTextLocal("");
-
-    const teamId = team?.team_id ?? "demo-team";
-
-    startAttempt(teamId, "reaction");
-  };
-
   const handleWriteUpChange = (text: string) => {
     setWriteUpTextLocal(text);
     setWriteUp(text);
   };
 
-  // Results — derived from the pure scoring lib so the component and
-  // the persisted attempt agree on the same numbers.
-  const reactionResult = calculateReactionResult(reactionTimes);
-  const reactionScore = reactionResult?.reaction_score ?? 0;
-  const averageReaction = reactionResult?.average_ms ?? 0;
-  const fastestReaction = reactionResult?.fastest_ms ?? 0;
+  // =====================================================================
+  // Computed values
+  // =====================================================================
 
-  // Improvement vs the team's previous attempt at this activity.
+  const result =
+    phase === 3 && phaseStatus === "done"
+      ? calculateReactionBoardResult(phase1Times, phase2Times, phase3Deviations)
+      : null;
+  const overallScore = result?.overall_score ?? 0;
+
   const previous = getPreviousAttemptForActivity("reaction");
   const previousScore = previous?.score ?? null;
-  const improvement = calculateImprovement(reactionScore, previousScore);
+  const improvement = calculateImprovement(overallScore, previousScore);
 
   const briefSpeechText =
-    "Test how quickly you can react to a signal. " +
-    "Tap the screen as fast as possible when TAP appears.";
+    "Three quick tests of reaction and accuracy. " +
+    "First tap as fast as you can with your dominant hand, then your other hand, " +
+    "then trace a moving dot. Take turns through your team.";
+
+  // =====================================================================
+  // Render helpers
+  // =====================================================================
+
+  const phaseLabel = (p: Phase) => {
+    if (p === 1) return "Phase 1 · Tap Reaction (dominant hand)";
+    if (p === 2) return "Phase 2 · Swap Hands (non-dominant hand)";
+    return "Phase 3 · Tracing Challenge";
+  };
+
+  const renderReactionPhase = (
+    times: number[],
+    onStart: () => void,
+    onContinue: () => void,
+    continueLabel: string
+  ) => {
+    if (phaseStatus === "pending") {
+      return (
+        <View>
+          <Text
+            style={[
+              s.p,
+              {
+                color: theme.colors.text,
+                fontSize: theme.fontSize.md,
+                marginTop: theme.spacing.sm,
+              },
+            ]}
+          >
+            Tap the screen as soon as &quot;TAP!&quot; appears. {TOTAL_ROUNDS} rounds.
+            Rotate the phone through each team member.
+          </Text>
+          <TouchableOpacity
+            style={[
+              s.button,
+              {
+                backgroundColor: theme.colors.primary,
+                borderRadius: theme.radius.lg,
+                marginTop: theme.spacing.lg,
+              },
+            ]}
+            onPress={onStart}
+          >
+            <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
+              Start
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (phaseStatus === "running") {
+      return (
+        <View>
+          <Text
+            style={[
+              s.subHeader,
+              { color: theme.colors.textMuted, marginTop: theme.spacing.sm },
+            ]}
+          >
+            Round {Math.min(times.length + 1, TOTAL_ROUNDS)} / {TOTAL_ROUNDS}
+          </Text>
+          {waitingForTap ? (
+            <View
+              style={[
+                s.tapArea,
+                {
+                  backgroundColor: showTap
+                    ? theme.colors.success
+                    : theme.colors.surface,
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radius.xl,
+                  marginTop: theme.spacing.md,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                style={s.fullArea}
+                activeOpacity={1}
+                onPress={handleReactionTap}
+              >
+                <Text
+                  style={[
+                    s.tapText,
+                    {
+                      color: showTap
+                        ? theme.colors.textOnPrimary
+                        : theme.colors.textMuted,
+                    },
+                  ]}
+                >
+                  {showTap ? "TAP!" : "Wait..."}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      );
+    }
+
+    // done
+    const avg = times.length
+      ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
+      : 0;
+    const fastest = times.length ? Math.min(...times) : 0;
+    return (
+      <View>
+        <Text
+          style={[
+            s.p,
+            {
+              color: theme.colors.success,
+              fontSize: theme.fontSize.md,
+              marginTop: theme.spacing.md,
+            },
+          ]}
+        >
+          ✓ Done — average {avg} ms, fastest {fastest} ms
+        </Text>
+        <TouchableOpacity
+          style={[
+            s.button,
+            {
+              backgroundColor: theme.colors.primary,
+              borderRadius: theme.radius.lg,
+              marginTop: theme.spacing.lg,
+            },
+          ]}
+          onPress={onContinue}
+        >
+          <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
+            {continueLabel}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderTracingPhase = () => {
+    if (phaseStatus === "pending") {
+      return (
+        <View>
+          <Text
+            style={[
+              s.p,
+              {
+                color: theme.colors.text,
+                fontSize: theme.fontSize.md,
+                marginTop: theme.spacing.sm,
+              },
+            ]}
+          >
+            Keep your finger on the moving dot as it slides across the screen.
+            Lasts {TRACING_DURATION_MS / 1000} seconds.
+          </Text>
+          <TouchableOpacity
+            style={[
+              s.button,
+              {
+                backgroundColor: theme.colors.primary,
+                borderRadius: theme.radius.lg,
+                marginTop: theme.spacing.lg,
+              },
+            ]}
+            onPress={startPhase3}
+          >
+            <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
+              Start tracing
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (phaseStatus === "running") {
+      const interpolatedLeft = dotXAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, Math.max(0, tracingAreaWidth - DOT_SIZE)],
+      });
+      return (
+        <View>
+          <Text
+            style={[
+              s.subHeader,
+              { color: theme.colors.textMuted, marginTop: theme.spacing.sm },
+            ]}
+          >
+            {tracingSecondsLeft.toFixed(1)}s left — keep your finger on the dot
+          </Text>
+          <View
+            onLayout={handleTracingAreaLayout}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderStart={handleTracingTouchStart}
+            onResponderMove={handleTracingTouchMove}
+            onResponderRelease={handleTracingTouchEnd}
+            style={[
+              s.tracingArea,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderStrong,
+                borderRadius: theme.radius.lg,
+                marginTop: theme.spacing.md,
+              },
+            ]}
+          >
+            <View
+              style={[
+                s.tracingMidline,
+                { backgroundColor: theme.colors.border },
+              ]}
+            />
+            <Animated.View
+              style={[
+                s.dot,
+                {
+                  backgroundColor: theme.colors.primary,
+                  left: interpolatedLeft,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    // done
+    const avgDev =
+      phase3Deviations.length > 0
+        ? Math.round(
+            phase3Deviations.reduce((a, b) => a + b, 0) /
+              phase3Deviations.length
+          )
+        : 0;
+    return (
+      <View>
+        <Text
+          style={[
+            s.p,
+            {
+              color: theme.colors.success,
+              fontSize: theme.fontSize.md,
+              marginTop: theme.spacing.md,
+            },
+          ]}
+        >
+          ✓ Done — average deviation {avgDev} px
+        </Text>
+        {!submitted ? (
+          <TouchableOpacity
+            style={[
+              s.button,
+              {
+                backgroundColor: theme.colors.success,
+                borderRadius: theme.radius.lg,
+                marginTop: theme.spacing.lg,
+              },
+            ]}
+            onPress={handleSubmit}
+          >
+            <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
+              Submit &amp; see results
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text
+            style={[
+              s.p,
+              {
+                color: theme.colors.textMuted,
+                fontSize: theme.fontSize.sm,
+                marginTop: theme.spacing.lg,
+                textAlign: "center",
+              },
+            ]}
+          >
+            Submitted. Tap the Results tab to see your score.
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   return (
     <ActivityShell
@@ -207,15 +676,11 @@ export default function ReactionBoard() {
           <Text
             style={[
               s.h,
-              {
-                color: theme.colors.primary,
-                fontSize: theme.fontSize.xl,
-              },
+              { color: theme.colors.primary, fontSize: theme.fontSize.xl },
             ]}
           >
-            What you'll do
+            What you&apos;ll do
           </Text>
-
           <Text
             style={[
               s.p,
@@ -239,9 +704,8 @@ export default function ReactionBoard() {
               },
             ]}
           >
-            What you need
+            The three phases
           </Text>
-
           <Text
             style={[
               s.p,
@@ -252,7 +716,12 @@ export default function ReactionBoard() {
               },
             ]}
           >
-            • A phone{"\n"}• Fast reactions{"\n"}• Focus and concentration
+            • Phase 1 — Tap the screen as fast as you can with your{" "}
+            <Text style={{ fontWeight: "700" }}>dominant hand</Text>.{"\n"}
+            • Phase 2 — Repeat with your{" "}
+            <Text style={{ fontWeight: "700" }}>non-dominant hand</Text>.{"\n"}
+            • Phase 3 — Trace a moving dot to test{" "}
+            <Text style={{ fontWeight: "700" }}>accuracy</Text>.
           </Text>
         </View>
       }
@@ -264,128 +733,42 @@ export default function ReactionBoard() {
               {
                 color: theme.colors.primary,
                 fontSize: theme.fontSize.xl,
-                textAlign: "center",
               },
             ]}
           >
-            Round {Math.min(round, TOTAL_ROUNDS)} / {TOTAL_ROUNDS}
+            {phaseLabel(phase)}
           </Text>
 
-          {!gameStarted && reactionTimes.length === 0 && !submitted ? (
-            <TouchableOpacity
-              style={[
-                s.button,
-                {
-                  backgroundColor: theme.colors.primary,
-                  borderRadius: theme.radius.lg,
-                  marginTop: theme.spacing.xl,
-                },
-              ]}
-              onPress={handleStartGame}
-            >
-              <Text
-                style={[
-                  s.buttonText,
-                  {
-                    color: theme.colors.textOnPrimary,
-                  },
-                ]}
-              >
-                Start Test
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {waitingForTap ? (
-            <View
-              style={[
-                s.tapArea,
-                {
-                  backgroundColor: showTap
-                    ? theme.colors.success
-                    : theme.colors.surface,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radius.xl,
-                },
-              ]}
-            >
-              <TouchableOpacity
-                style={s.fullArea}
-                activeOpacity={1}
-                onPress={handleTap}
-              >
-                <Text
-                  style={[
-                    s.tapText,
-                    {
-                      color: showTap
-                        ? theme.colors.textOnPrimary
-                        : theme.colors.textMuted,
-                    },
-                  ]}
-                >
-                  {showTap ? "TAP!" : "Wait..."}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {!gameStarted &&
-          reactionTimes.length === TOTAL_ROUNDS &&
-          !submitted ? (
-            <TouchableOpacity
-              style={[
-                s.button,
-                {
-                  backgroundColor: theme.colors.success,
-                  borderRadius: theme.radius.lg,
-                  marginTop: theme.spacing.lg,
-                },
-              ]}
-              onPress={handleSubmit}
-            >
-              <Text
-                style={[
-                  s.buttonText,
-                  {
-                    color: theme.colors.textOnPrimary,
-                  },
-                ]}
-              >
-                Submit & see results
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {submitted ? (
-            <Text
-              style={[
-                s.p,
-                {
-                  color: theme.colors.textMuted,
-                  fontSize: theme.fontSize.sm,
-                  marginTop: theme.spacing.lg,
-                  textAlign: "center",
-                },
-              ]}
-            >
-              Submitted. Tap the Results tab to see your score.
-            </Text>
-          ) : null}
+          {phase === 1 &&
+            renderReactionPhase(
+              phase1Times,
+              startPhase1,
+              advanceToPhase2,
+              "Continue to Phase 2"
+            )}
+          {phase === 2 &&
+            renderReactionPhase(
+              phase2Times,
+              startPhase2,
+              advanceToPhase3,
+              "Continue to Phase 3"
+            )}
+          {phase === 3 && renderTracingPhase()}
         </View>
       }
       results={
         <View>
-          {!submitted ? (
+          {!submitted || !result ? (
             <Text
               style={[
                 s.p,
                 {
                   color: theme.colors.textMuted,
+                  fontSize: theme.fontSize.md,
                 },
               ]}
             >
-              Complete the reaction test first.
+              Complete all three phases on the Run tab and tap Submit first.
             </Text>
           ) : (
             <View>
@@ -396,10 +779,24 @@ export default function ReactionBoard() {
                     color: theme.colors.primary,
                     fontSize: theme.fontSize.xxl,
                     textAlign: "center",
+                    marginTop: theme.spacing.lg,
                   },
                 ]}
               >
                 Nice work!
+              </Text>
+              <Text
+                style={[
+                  s.p,
+                  {
+                    color: theme.colors.textMuted,
+                    fontSize: theme.fontSize.sm,
+                    textAlign: "center",
+                    marginTop: theme.spacing.xs,
+                  },
+                ]}
+              >
+                Overall score · {team?.team_name ?? "Your team"}
               </Text>
 
               <Text
@@ -411,7 +808,7 @@ export default function ReactionBoard() {
                   },
                 ]}
               >
-                {reactionScore}
+                {overallScore}
               </Text>
 
               {improvement !== null ? (
@@ -450,25 +847,33 @@ export default function ReactionBoard() {
               <View
                 style={[
                   s.cards,
-                  {
-                    marginTop: theme.spacing.lg,
-                    gap: theme.spacing.sm,
-                  },
+                  { marginTop: theme.spacing.lg, gap: theme.spacing.sm },
                 ]}
               >
                 <MetricCard
-                  label="Average Reaction"
-                  value={averageReaction.toFixed(0)}
-                  unit="ms"
+                  label="Phase 1 · Dominant"
+                  value={result.phase1.average_ms.toFixed(0)}
+                  unit="ms avg"
                 />
-
                 <MetricCard
-                  label="Fastest Reaction"
-                  value={String(fastestReaction)}
+                  label="Phase 2 · Non-dominant"
+                  value={result.phase2.average_ms.toFixed(0)}
+                  unit="ms avg"
+                />
+                <MetricCard
+                  label="Hand difference"
+                  value={result.hand_diff_ms.toFixed(0)}
                   unit="ms"
                 />
-
-                <MetricCard label="Rounds" value={String(TOTAL_ROUNDS)} />
+                <MetricCard
+                  label="Phase 3 · Tracing"
+                  value={result.phase3.average_deviation_px.toFixed(0)}
+                  unit="px avg"
+                />
+                <MetricCard
+                  label="Phase scores"
+                  value={`${result.phase1.reaction_score} · ${result.phase2.reaction_score} · ${result.phase3.tracing_score}`}
+                />
               </View>
 
               {!sentToLeaderboard ? (
@@ -492,9 +897,7 @@ export default function ReactionBoard() {
                     <Text
                       style={[
                         s.buttonText,
-                        {
-                          color: theme.colors.textOnPrimary,
-                        },
+                        { color: theme.colors.textOnPrimary },
                       ]}
                     >
                       Send to leaderboard 🏆
@@ -519,9 +922,7 @@ export default function ReactionBoard() {
 
               <TouchableOpacity
                 onPress={handleTryAgain}
-                style={{
-                  marginTop: theme.spacing.md,
-                }}
+                style={{ marginTop: theme.spacing.md }}
               >
                 <Text
                   style={[
@@ -546,15 +947,11 @@ export default function ReactionBoard() {
           <Text
             style={[
               s.h,
-              {
-                color: theme.colors.primary,
-                fontSize: theme.fontSize.xl,
-              },
+              { color: theme.colors.primary, fontSize: theme.fontSize.xl },
             ]}
           >
             Reflection
           </Text>
-
           <Text
             style={[
               s.p,
@@ -565,8 +962,8 @@ export default function ReactionBoard() {
               },
             ]}
           >
-            Did your reaction improve over time? What distractions affected your
-            speed?
+            Did reaction time improve over the rounds? How different was your
+            non-dominant hand? What made the tracing easier or harder?
           </Text>
 
           <TextInput
@@ -597,66 +994,47 @@ export default function ReactionBoard() {
 }
 
 const s = StyleSheet.create({
-  h: {
-    fontWeight: "700",
-  },
-
-  p: {
-    lineHeight: 22,
-  },
-
+  h: { fontWeight: "700" },
+  p: { lineHeight: 22 },
+  subHeader: { fontSize: 14, fontWeight: "600", textAlign: "center" },
   tapArea: {
-    marginTop: 32,
-    height: 300,
+    height: 240,
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-
   fullArea: {
     width: "100%",
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },
-
-  tapText: {
-    fontSize: 48,
-    fontWeight: "700",
-  },
-
-  button: {
-    alignItems: "center",
-    paddingVertical: 16,
-  },
-
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  bigScore: {
-    fontSize: 96,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-
-  badge: {},
-
-  badgeText: {
-    fontWeight: "700",
-  },
-
-  cards: {
-    flexDirection: "column",
-  },
-
-  cta: {
-    alignItems: "center",
-  },
-
-  textarea: {
+  tapText: { fontSize: 48, fontWeight: "700" },
+  tracingArea: {
+    height: TRACING_AREA_HEIGHT,
     borderWidth: 1,
-    minHeight: 140,
+    overflow: "hidden",
   },
+  tracingMidline: {
+    position: "absolute",
+    top: TRACING_AREA_HEIGHT / 2,
+    left: 12,
+    right: 12,
+    height: 1,
+  },
+  dot: {
+    position: "absolute",
+    top: TRACING_AREA_HEIGHT / 2 - DOT_SIZE / 2,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+  },
+  button: { alignItems: "center", paddingVertical: 16 },
+  buttonText: { fontSize: 16, fontWeight: "600" },
+  bigScore: { fontSize: 96, fontWeight: "700", textAlign: "center" },
+  badge: {},
+  badgeText: { fontWeight: "700" },
+  cards: { flexDirection: "column" },
+  cta: { alignItems: "center" },
+  textarea: { borderWidth: 1, minHeight: 140 },
 });
