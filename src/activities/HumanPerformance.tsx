@@ -13,7 +13,9 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
+import { calculateHumanPerformanceResult } from "../lib/humanPerformanceScore";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
@@ -29,6 +31,9 @@ export default function HumanPerformance() {
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
+  const getPreviousAttemptForActivity = useAttemptStore(
+    (s) => s.getPreviousAttemptForActivity
+  );
 
   const [isRunning, setIsRunning] = useState(false);
   const [countdown, setCountdown] = useState(10);
@@ -123,42 +128,23 @@ export default function HumanPerformance() {
   const finishChallenge = () => {
     setIsRunning(false);
 
-    const samples = movementSamples.current;
+    const result = calculateHumanPerformanceResult(movementSamples.current);
+    if (!result) return;
 
-    if (samples.length === 0) return;
-
-    const avgMovement = samples.reduce((a, b) => a + b, 0) / samples.length;
-
-    const roundedMovement = Number(avgMovement.toFixed(2));
-
-    let score = Math.max(0, Math.round(100 - roundedMovement * 10));
-
-    let performance = "Needs Improvement";
-
-    if (score >= 90) {
-      performance = "Excellent";
-    } else if (score >= 80) {
-      performance = "Good";
-    } else if (score >= 70) {
-      performance = "Fair";
-    }
-
-    setMovementScore(roundedMovement);
-    setStabilityScore(score);
+    setMovementScore(result.avg_movement);
+    setStabilityScore(result.stability_score);
+    setPerformanceLevel(result.performance_level);
 
     updateRawData({
-      movementScore: roundedMovement,
-      stabilityScore: score,
-      performanceLevel: performance,
+      movementScore: result.avg_movement,
+      stabilityScore: result.stability_score,
+      performanceLevel: result.performance_level,
       duration: 10,
-      samplesCollected: samples.length,
+      samplesCollected: result.samples_collected,
     });
 
-    setScore(score);
-
+    setScore(result.stability_score);
     finishAttempt();
-
-    setPerformanceLevel(performance);
   };
 
   const handleSubmit = () => {
@@ -218,6 +204,11 @@ export default function HumanPerformance() {
     setWriteUpTextLocal(text);
     setWriteUp(text);
   };
+
+  // Comparison vs the team's previous attempt at this activity.
+  const previous = getPreviousAttemptForActivity("human-perf");
+  const previousScore = previous?.score ?? null;
+  const improvement = calculateImprovement(stabilityScore, previousScore);
 
   const briefSpeechText =
     "Hold your phone as steady as possible for 10 seconds. " +
@@ -431,6 +422,39 @@ export default function HumanPerformance() {
                 {stabilityScore}
               </Text>
 
+              {improvement !== null ? (
+                <View
+                  style={[
+                    s.badge,
+                    {
+                      backgroundColor:
+                        improvement >= 0
+                          ? theme.colors.success
+                          : theme.colors.warning,
+                      borderRadius: theme.radius.md,
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      alignSelf: "center",
+                      marginTop: theme.spacing.md,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.badgeText,
+                      {
+                        color: theme.colors.textOnPrimary,
+                        fontSize: theme.fontSize.sm,
+                      },
+                    ]}
+                  >
+                    {improvement >= 0 ? "↑" : "↓"} {Math.abs(improvement)}%{" "}
+                    {improvement >= 0 ? "better than" : "compared to"} last
+                    attempt
+                  </Text>
+                </View>
+              ) : null}
+
               <View
                 style={[
                   s.cards,
@@ -601,6 +625,12 @@ const s = StyleSheet.create({
     fontSize: 96,
     fontWeight: "700",
     textAlign: "center",
+  },
+
+  badge: {},
+
+  badgeText: {
+    fontWeight: "700",
   },
 
   cards: {
