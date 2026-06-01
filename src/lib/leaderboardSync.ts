@@ -6,7 +6,6 @@ export interface LeaderboardEntry {
   activity_id: string;
   score: number;
   year_level: number;
-  school_code: string;
   completed_at: number;
 }
 
@@ -32,7 +31,6 @@ export async function sendToLeaderboard(
     activity_id: attempt.activity_id,
     score: attempt.score,
     year_level: team.grade_level,
-    school_code: team.event_code ?? '',
     completed_at: attempt.finished_at,
   };
 
