@@ -14,6 +14,8 @@ import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
 import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { calculateImprovement } from "../lib/parachuteScore";
+import { calculateReactionResult } from "../lib/reactionScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
@@ -32,6 +34,9 @@ export default function ReactionBoard() {
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const current = useAttemptStore((s) => s.current);
+  const getPreviousAttemptForActivity = useAttemptStore(
+    (s) => s.getPreviousAttemptForActivity
+  );
 
   const [gameStarted, setGameStarted] = useState(false);
   const [waitingForTap, setWaitingForTap] = useState(false);
@@ -104,19 +109,18 @@ export default function ReactionBoard() {
   const finishGame = (times: number[]) => {
     setGameStarted(false);
 
-    const avg = times.reduce((a, b) => a + b, 0) / times.length;
-
-    const score = Math.max(0, Math.round(100 - (avg - 200) / 8));
+    const result = calculateReactionResult(times);
+    if (!result) return;
 
     updateRawData({
-      reactionTimes: times,
-      averageReaction: avg,
-      fastestReaction: Math.min(...times),
+      reactionTimes: result.reaction_times,
+      averageReaction: result.average_ms,
+      fastestReaction: result.fastest_ms,
+      reactionScore: result.reaction_score,
       rounds: TOTAL_ROUNDS,
     });
 
-    setScore(score);
-
+    setScore(result.reaction_score);
     finishAttempt();
   };
 
@@ -177,19 +181,17 @@ export default function ReactionBoard() {
     setWriteUp(text);
   };
 
-  // Results
-  const averageReaction =
-    reactionTimes.length > 0
-      ? reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length
-      : 0;
+  // Results — derived from the pure scoring lib so the component and
+  // the persisted attempt agree on the same numbers.
+  const reactionResult = calculateReactionResult(reactionTimes);
+  const reactionScore = reactionResult?.reaction_score ?? 0;
+  const averageReaction = reactionResult?.average_ms ?? 0;
+  const fastestReaction = reactionResult?.fastest_ms ?? 0;
 
-  const fastestReaction =
-    reactionTimes.length > 0 ? Math.min(...reactionTimes) : 0;
-
-  const reactionScore = Math.max(
-    0,
-    Math.round(100 - (averageReaction - 200) / 8)
-  );
+  // Improvement vs the team's previous attempt at this activity.
+  const previous = getPreviousAttemptForActivity("reaction");
+  const previousScore = previous?.score ?? null;
+  const improvement = calculateImprovement(reactionScore, previousScore);
 
   const briefSpeechText =
     "Test how quickly you can react to a signal. " +
@@ -412,6 +414,39 @@ export default function ReactionBoard() {
                 {reactionScore}
               </Text>
 
+              {improvement !== null ? (
+                <View
+                  style={[
+                    s.badge,
+                    {
+                      backgroundColor:
+                        improvement >= 0
+                          ? theme.colors.success
+                          : theme.colors.warning,
+                      borderRadius: theme.radius.md,
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      alignSelf: "center",
+                      marginTop: theme.spacing.md,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.badgeText,
+                      {
+                        color: theme.colors.textOnPrimary,
+                        fontSize: theme.fontSize.sm,
+                      },
+                    ]}
+                  >
+                    {improvement >= 0 ? "↑" : "↓"} {Math.abs(improvement)}%{" "}
+                    {improvement >= 0 ? "better than" : "compared to"} last
+                    attempt
+                  </Text>
+                </View>
+              ) : null}
+
               <View
                 style={[
                   s.cards,
@@ -604,6 +639,12 @@ const s = StyleSheet.create({
     fontSize: 96,
     fontWeight: "700",
     textAlign: "center",
+  },
+
+  badge: {},
+
+  badgeText: {
+    fontWeight: "700",
   },
 
   cards: {
