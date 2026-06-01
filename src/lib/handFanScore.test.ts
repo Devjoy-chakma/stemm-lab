@@ -1,69 +1,119 @@
-import { calculateHandFanResult } from './handFanScore';
+import {
+  calculateHandFanResult,
+  findMaterial,
+  MATERIALS,
+  DISTANCES_CM,
+} from './handFanScore';
+
+describe('findMaterial', () => {
+  it('returns the material when id matches', () => {
+    expect(findMaterial('paper')?.id).toBe('paper');
+    expect(findMaterial('cardboard')?.id).toBe('cardboard');
+  });
+
+  it('returns null for unknown id', () => {
+    expect(findMaterial('plastic')).toBeNull();
+  });
+});
+
+describe('MATERIALS catalog', () => {
+  it('contains only paper and cardboard', () => {
+    const ids = MATERIALS.map((m) => m.id);
+    expect(ids).toEqual(['paper', 'cardboard']);
+  });
+});
 
 describe('calculateHandFanResult', () => {
-  it('returns null for zero fans', () => {
-    expect(calculateHandFanResult(0, 10)).toBeNull();
+  it('returns null for an unknown material', () => {
+    expect(calculateHandFanResult('plastic', 30, 30, 30)).toBeNull();
   });
 
-  it('returns null for negative fans', () => {
-    expect(calculateHandFanResult(-5, 10)).toBeNull();
+  it('returns null for a negative prediction', () => {
+    expect(calculateHandFanResult('paper', 30, -1, 30)).toBeNull();
   });
 
-  it('returns null for zero duration', () => {
-    expect(calculateHandFanResult(20, 0)).toBeNull();
+  it('returns null for a prediction beyond 180°', () => {
+    expect(calculateHandFanResult('paper', 30, 200, 30)).toBeNull();
   });
 
-  it('returns null for negative duration', () => {
-    expect(calculateHandFanResult(20, -5)).toBeNull();
+  it('returns null for a negative outcome', () => {
+    expect(calculateHandFanResult('paper', 30, 30, -1)).toBeNull();
   });
 
-  it('calculates fans per second correctly', () => {
-    // 30 fans in 10 seconds = 3 fans/second
-    const result = calculateHandFanResult(30, 10);
-    expect(result?.fans_per_second).toBeCloseTo(3.0, 5);
+  it('returns null for an outcome beyond 180°', () => {
+    expect(calculateHandFanResult('paper', 30, 30, 200)).toBeNull();
   });
 
-  it('returns total_fans and duration_seconds unchanged', () => {
-    const result = calculateHandFanResult(25, 12.5);
-    expect(result?.total_fans).toBe(25);
-    expect(result?.duration_seconds).toBe(12.5);
+  it('returns null for a non-positive distance', () => {
+    expect(calculateHandFanResult('paper', 0, 30, 30)).toBeNull();
+    expect(calculateHandFanResult('paper', -5, 30, 30)).toBeNull();
   });
 
-  it('gives high score for slow, deliberate fanning (0.5/s)', () => {
-    // 0.5 fans/second → (1 / 0.5) * 50 = 100
-    const result = calculateHandFanResult(5, 10);
-    expect(result?.efficiency_score).toBe(100);
+  it('echoes the inputs in the result', () => {
+    const result = calculateHandFanResult('cardboard', 30, 40, 55);
+    expect(result?.material.id).toBe('cardboard');
+    expect(result?.distance_cm).toBe(30);
+    expect(result?.prediction_degrees).toBe(40);
+    expect(result?.outcome_degrees).toBe(55);
   });
 
-  it('gives a 50 score for 1 fan per second', () => {
-    // 1 fan/second → (1 / 1) * 50 = 50
-    const result = calculateHandFanResult(10, 10);
-    expect(result?.efficiency_score).toBe(50);
+  it('scores 0 for a 0° bend', () => {
+    const result = calculateHandFanResult('paper', 30, 0, 0);
+    expect(result?.airflow_score).toBe(0);
   });
 
-  it('gives a low score for rapid panicked fanning (4/s)', () => {
-    // 4 fans/second → (1 / 4) * 50 = 12.5 → 13
-    const result = calculateHandFanResult(40, 10);
-    expect(result?.efficiency_score).toBe(13);
+  it('scores 100 for a 90° (right-angle) bend', () => {
+    const result = calculateHandFanResult('paper', 30, 90, 90);
+    expect(result?.airflow_score).toBe(100);
   });
 
-  it('clamps efficiency_score to 100 maximum', () => {
-    // Very slow fanning (0.1/s) → raw score 500 → clamped to 100
-    const result = calculateHandFanResult(1, 10);
-    expect(result?.efficiency_score).toBe(100);
+  it('scores 50 for a 45° bend', () => {
+    const result = calculateHandFanResult('paper', 30, 45, 45);
+    expect(result?.airflow_score).toBe(50);
   });
 
-  it('clamps efficiency_score to 0 minimum', () => {
-    // Score is naturally always positive given valid inputs,
-    // but just in case the formula changes
-    const result = calculateHandFanResult(1000, 1);
-    expect(result?.efficiency_score).toBeGreaterThanOrEqual(0);
+  it('clamps airflow_score to 100 for bends beyond 90°', () => {
+    const result = calculateHandFanResult('paper', 30, 90, 150);
+    expect(result?.airflow_score).toBe(100);
   });
 
-  it('rounds efficiency_score to integer', () => {
-    // 7 fans in 5 seconds = 1.4 fans/sec → (1/1.4)*50 = 35.71... → 36
-    const result = calculateHandFanResult(7, 5);
-    expect(result?.efficiency_score).toBe(36);
-    expect(Number.isInteger(result?.efficiency_score)).toBe(true);
+  it('returns 100 prediction_accuracy for an exact prediction', () => {
+    const result = calculateHandFanResult('paper', 30, 45, 45);
+    expect(result?.prediction_error_degrees).toBe(0);
+    expect(result?.prediction_accuracy).toBe(100);
+  });
+
+  it('returns lower prediction_accuracy the further off the prediction', () => {
+    // Off by 30° → (1 - 30/90) * 100 = 66.67 → 67
+    const result = calculateHandFanResult('paper', 30, 30, 60);
+    expect(result?.prediction_error_degrees).toBe(30);
+    expect(result?.prediction_accuracy).toBe(67);
+  });
+
+  it('returns 0 prediction_accuracy when off by 90° or more', () => {
+    const off90 = calculateHandFanResult('paper', 30, 0, 90);
+    expect(off90?.prediction_accuracy).toBe(0);
+
+    const off120 = calculateHandFanResult('paper', 30, 0, 120);
+    expect(off120?.prediction_accuracy).toBe(0);
+  });
+
+  it('treats over- and under-predictions symmetrically', () => {
+    const over = calculateHandFanResult('paper', 30, 60, 30);
+    const under = calculateHandFanResult('paper', 30, 30, 60);
+    expect(over?.prediction_accuracy).toBe(under?.prediction_accuracy);
+  });
+
+  it('returns integer scores', () => {
+    const result = calculateHandFanResult('paper', 30, 25, 32);
+    expect(Number.isInteger(result?.airflow_score)).toBe(true);
+    expect(Number.isInteger(result?.prediction_accuracy)).toBe(true);
+  });
+
+  it('accepts each canonical spec distance', () => {
+    for (const d of DISTANCES_CM) {
+      const result = calculateHandFanResult('paper', d, 30, 30);
+      expect(result).not.toBeNull();
+    }
   });
 });
