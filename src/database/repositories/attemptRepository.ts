@@ -3,6 +3,9 @@ import { getDatabase } from "../database";
 
 // Minimal display metadata so the activities FK on activity_attempts is
 // satisfied even though the activities table is never seeded elsewhere.
+// Icon values here are MaterialCommunityIcons names (mirrors what the
+// UI renders), so the SQLite `activities` table stays consistent with
+// the rest of the app — purely cosmetic for the DB.
 const ACTIVITY_META: Record<
   string,
   { name: string; category: string; icon: string; sort_order: number }
@@ -10,42 +13,42 @@ const ACTIVITY_META: Record<
   parachute: {
     name: "Parachute Drop",
     category: "engineering",
-    icon: "🪂",
+    icon: "parachute",
     sort_order: 1,
   },
 
   sound: {
     name: "Sound Pollution",
     category: "environment",
-    icon: "🔊",
+    icon: "volume-high",
     sort_order: 2,
   },
 
   "hand-fan": {
     name: "Hand Fan",
     category: "physics",
-    icon: "🪭",
+    icon: "weather-windy",
     sort_order: 3,
   },
 
   "human-perf": {
     name: "Human Performance",
     category: "fitness",
-    icon: "🏃",
+    icon: "run",
     sort_order: 4,
   },
 
   reaction: {
     name: "Reaction Board",
     category: "reaction",
-    icon: "⚡",
+    icon: "lightning-bolt",
     sort_order: 5,
   },
 
   breathing: {
     name: "Breathing Pace",
     category: "wellness",
-    icon: "🫁",
+    icon: "lungs",
     sort_order: 6,
   },
 };

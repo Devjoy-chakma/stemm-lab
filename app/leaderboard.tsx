@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   collection,
@@ -6,7 +7,7 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { useEffect, useMemo, useState } from "react";
+import { ComponentProps, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -27,42 +28,21 @@ import {
 import { LEADERBOARD_COLLECTION } from "../src/lib/leaderboardSync";
 import { useTheme } from "../src/theme";
 
+type MciName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
 const ACTIVITY_META: Record<
   string,
   {
-    icon: string;
+    icon: MciName;
     label: string;
   }
 > = {
-  parachute: {
-    icon: "🪂",
-    label: "Parachute Drop",
-  },
-
-  sound: {
-    icon: "🔊",
-    label: "Sound Pollution",
-  },
-
-  "hand-fan": {
-    icon: "🪭",
-    label: "Hand Fan",
-  },
-
-  "human-perf": {
-    icon: "🏃",
-    label: "Human Performance",
-  },
-
-  reaction: {
-    icon: "⚡",
-    label: "Reaction Board",
-  },
-
-  breathing: {
-    icon: "🫁",
-    label: "Breathing Pace",
-  },
+  parachute: { icon: "parachute", label: "Parachute Drop" },
+  sound: { icon: "volume-high", label: "Sound Pollution" },
+  "hand-fan": { icon: "weather-windy", label: "Hand Fan" },
+  "human-perf": { icon: "run", label: "Human Performance" },
+  reaction: { icon: "lightning-bolt", label: "Reaction Board" },
+  breathing: { icon: "lungs", label: "Breathing Pace" },
 };
 
 type TabKey =
@@ -74,14 +54,14 @@ type TabKey =
   | "reaction"
   | "breathing";
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: "overall", label: "Overall", icon: "🏆" },
-  { key: "parachute", label: "Parachute", icon: "🪂" },
-  { key: "sound", label: "Sound", icon: "🔊" },
-  { key: "hand-fan", label: "Hand Fan", icon: "🪭" },
-  { key: "human-perf", label: "Human Perf", icon: "🏃" },
-  { key: "reaction", label: "Reaction", icon: "⚡" },
-  { key: "breathing", label: "Breathing", icon: "🫁" },
+const TABS: { key: TabKey; label: string; icon: MciName }[] = [
+  { key: "overall", label: "Overall", icon: "trophy" },
+  { key: "parachute", label: "Parachute", icon: "parachute" },
+  { key: "sound", label: "Sound", icon: "volume-high" },
+  { key: "hand-fan", label: "Hand Fan", icon: "weather-windy" },
+  { key: "human-perf", label: "Human Perf", icon: "run" },
+  { key: "reaction", label: "Reaction", icon: "lightning-bolt" },
+  { key: "breathing", label: "Breathing", icon: "lungs" },
 ];
 
 export default function Leaderboard() {
@@ -243,6 +223,9 @@ export default function Leaderboard() {
       >
         {TABS.map((tab) => {
           const active = tab.key === activeTab;
+          const contentColor = active
+            ? theme.colors.textOnPrimary
+            : theme.colors.text;
           return (
             <TouchableOpacity
               key={tab.key}
@@ -258,18 +241,16 @@ export default function Leaderboard() {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  {
-                    color: active
-                      ? theme.colors.textOnPrimary
-                      : theme.colors.text,
-                  },
-                ]}
-              >
-                {tab.icon} {tab.label}
-              </Text>
+              <View style={styles.tabInner}>
+                <MaterialCommunityIcons
+                  name={tab.icon}
+                  size={16}
+                  color={contentColor}
+                />
+                <Text style={[styles.tabText, { color: contentColor }]}>
+                  {tab.label}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -564,6 +545,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
+  },
+
+  tabInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 
   tabText: {
