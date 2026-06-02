@@ -35,7 +35,12 @@ export default function ParachuteDrop() {
   const [dropHeight, setDropHeight] = useState<string>('2');
   const [toyMass, setToyMass] = useState<string>(String(DEFAULT_TOY_MASS_KG));
   const [contactTime, setContactTime] = useState<string>('');
-  const [attempts, setAttempts] = useState<number[]>([]);
+  // Each attempt carries the duration (used for scoring) and the
+  // cloud video URL returned by the uploader. video_url is '' if the
+  // upload failed — the score still works because it only needs duration.
+  const [attempts, setAttempts] = useState<
+    { duration: number; video_url: string }[]
+  >([]);
   const [writeUpText, setWriteUpTextLocal] = useState<string>('');
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
@@ -49,7 +54,10 @@ export default function ParachuteDrop() {
 
   // ---- Recording handlers ----
   const handleRecordingConfirmed = (recording: DropRecording) => {
-    setAttempts((prev) => [...prev, recording.duration_seconds]);
+    setAttempts((prev) => [
+      ...prev,
+      { duration: recording.duration_seconds, video_url: recording.uri },
+    ]);
   };
 
   const handleRecordingDiscarded = () => {};
@@ -59,9 +67,11 @@ export default function ParachuteDrop() {
     const heightNum = parseFloat(dropHeight) || 0;
     const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
     const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
+    const durations = attempts.map((a) => a.duration);
+    const videoUrls = attempts.map((a) => a.video_url).filter(Boolean);
     const result = calculateParachuteResult(
       heightNum,
-      attempts,
+      durations,
       massNum,
       contactNum
     );
@@ -71,7 +81,8 @@ export default function ParachuteDrop() {
       heightNum,
       massKg: massNum,
       contactTimeSeconds: contactNum,
-      attempts,
+      attempts: durations,
+      video_urls: videoUrls,
       ...result,
     });
     setScore(result.dragScore);
@@ -118,10 +129,11 @@ export default function ParachuteDrop() {
   const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
   const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
   const hasAllAttempts = attempts.length >= 3;
+  const durations = attempts.map((a) => a.duration);
 
   const computed = calculateParachuteResult(
     heightNum,
-    attempts,
+    durations,
     massNum,
     contactNum
   );
@@ -281,12 +293,13 @@ export default function ParachuteDrop() {
               <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.lg }]}>
                 Recorded attempts
               </Text>
-              {attempts.map((t, i) => (
+              {attempts.map((a, i) => (
                 <Text
                   key={i}
                   style={[s.p, { color: theme.colors.text, fontSize: theme.fontSize.md, marginTop: theme.spacing.xs }]}
                 >
-                  Drop {i + 1}: {t.toFixed(2)} s
+                  Drop {i + 1}: {a.duration.toFixed(2)} s
+                  {a.video_url ? ' · uploaded ✓' : ''}
                 </Text>
               ))}
             </View>
