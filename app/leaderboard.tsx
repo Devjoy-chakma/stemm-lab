@@ -6,10 +6,11 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -18,6 +19,11 @@ import {
 
 import { getLeaderboard } from "../src/database/repositories/attemptRepository";
 import { db } from "../src/lib/firebase";
+import {
+  computeTeamTotals,
+  rankActivity,
+  RawLeaderboardEntry,
+} from "../src/lib/leaderboardAggregation";
 import { LEADERBOARD_COLLECTION } from "../src/lib/leaderboardSync";
 import { useTheme } from "../src/theme";
 
@@ -59,13 +65,41 @@ const ACTIVITY_META: Record<
   },
 };
 
+type TabKey =
+  | "overall"
+  | "parachute"
+  | "sound"
+  | "hand-fan"
+  | "human-perf"
+  | "reaction"
+  | "breathing";
+
+const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: "overall", label: "Overall", icon: "🏆" },
+  { key: "parachute", label: "Parachute", icon: "🪂" },
+  { key: "sound", label: "Sound", icon: "🔊" },
+  { key: "hand-fan", label: "Hand Fan", icon: "🪭" },
+  { key: "human-perf", label: "Human Perf", icon: "🏃" },
+  { key: "reaction", label: "Reaction", icon: "⚡" },
+  { key: "breathing", label: "Breathing", icon: "🫁" },
+];
+
 export default function Leaderboard() {
   const router = useRouter();
   const { theme } = useTheme();
 
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<RawLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingOfflineFallback, setUsingOfflineFallback] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("overall");
+
+  // Two derived views: Overall (sum-of-bests per team) or a single
+  // activity's per-team ranking. Recomputed only when rows or tab change.
+  const displayed = useMemo(() => {
+    if (activeTab === "overall") return computeTeamTotals(rows);
+    return rankActivity(rows, activeTab);
+  }, [rows, activeTab]);
+  const isOverall = activeTab === "overall";
 
   // Subscribe to Firestore (real-time). If the read fails (offline, no
   // permissions, etc.), fall back to the locally-persisted SQLite
@@ -83,7 +117,15 @@ export default function Leaderboard() {
       q,
       (snap) => {
         if (!active) return;
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const data: RawLeaderboardEntry[] = snap.docs.map((d) => {
+          const x = d.data() as any;
+          return {
+            discriminator: x.discriminator,
+            team_name: x.team_name,
+            activity_id: x.activity_id,
+            score: Number(x.score) || 0,
+          };
+        });
         setRows(data);
         setUsingOfflineFallback(false);
         setLoading(false);
@@ -92,9 +134,18 @@ export default function Leaderboard() {
         console.warn("Firestore leaderboard read failed:", err);
         if (!active) return;
         try {
-          const localRows = await getLeaderboard();
+          const localRows = (await getLeaderboard()) as any[];
           if (!active) return;
-          setRows(localRows as any[]);
+          // SQLite getLeaderboard returns one row per attempt and has no
+          // discriminator column — use team_name as the team key. Multiple
+          // attempts collapse to the best one inside the aggregation lib.
+          const mapped: RawLeaderboardEntry[] = localRows.map((r) => ({
+            discriminator: String(r.team_name),
+            team_name: String(r.team_name),
+            activity_id: String(r.activity_id),
+            score: Number(r.score) || 0,
+          }));
+          setRows(mapped);
           setUsingOfflineFallback(true);
         } catch (e) {
           console.warn("SQLite leaderboard fallback also failed:", e);
@@ -183,6 +234,47 @@ export default function Leaderboard() {
         </View>
       </View>
 
+      {/* TABS */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScroll}
+        contentContainerStyle={styles.tabContent}
+      >
+        {TABS.map((tab) => {
+          const active = tab.key === activeTab;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[
+                styles.tab,
+                {
+                  backgroundColor: active
+                    ? theme.colors.primary
+                    : theme.colors.surface,
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radius.md,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  {
+                    color: active
+                      ? theme.colors.textOnPrimary
+                      : theme.colors.text,
+                  },
+                ]}
+              >
+                {tab.icon} {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
       {usingOfflineFallback ? (
         <View
           style={[
@@ -203,7 +295,7 @@ export default function Leaderboard() {
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
-      ) : rows.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <View style={styles.emptyState}>
           <Text
             style={[
@@ -224,17 +316,29 @@ export default function Leaderboard() {
               },
             ]}
           >
-            No completed attempts yet.
+            {isOverall
+              ? "No completed attempts yet."
+              : `No team has completed ${
+                  ACTIVITY_META[activeTab]?.label ?? activeTab
+                } yet.`}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={rows}
-          keyExtractor={(item) => String(item.id ?? item.attempt_id)}
+          data={displayed as any[]}
+          keyExtractor={(item) => String(item.discriminator)}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => {
             const isTopThree = index < 3;
+            // Both row shapes carry rank, discriminator, team_name.
+            // Overall has `total` + `activities_completed`; activity
+            // rankings have `score`.
+            const row = item as any;
+            const displayScore: number = row.total ?? row.score ?? 0;
+            const subInfo: string | null = isOverall
+              ? `${row.activities_completed ?? 0}/6 activities`
+              : null;
 
             return (
               <View
@@ -314,7 +418,7 @@ export default function Leaderboard() {
                         },
                       ]}
                     >
-                      {Math.round(item.score ?? 0)}
+                      {Math.round(displayScore)}
                     </Text>
 
                     <Text
@@ -325,7 +429,7 @@ export default function Leaderboard() {
                         },
                       ]}
                     >
-                      SCORE
+                      {isOverall ? "TOTAL" : "SCORE"}
                     </Text>
                   </View>
                 </View>
@@ -348,20 +452,20 @@ export default function Leaderboard() {
                     </Text>
                   </View>
 
-                  <View style={styles.activitySection}>
-                    <Text
-                      style={[
-                        styles.activityText,
-                        {
-                          color: theme.colors.primary,
-                        },
-                      ]}
-                    >
-                      {ACTIVITY_META[item.activity_id]?.icon}{" "}
-                      {ACTIVITY_META[item.activity_id]?.label ??
-                        item.activity_id}
-                    </Text>
-                  </View>
+                  {subInfo ? (
+                    <View style={styles.activitySection}>
+                      <Text
+                        style={[
+                          styles.activityText,
+                          {
+                            color: theme.colors.primary,
+                          },
+                        ]}
+                      >
+                        {subInfo}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             );
@@ -443,6 +547,28 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 20,
     fontWeight: "700",
+  },
+
+  tabScroll: {
+    flexGrow: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
+  tabContent: {
+    gap: 8,
+    alignItems: "center",
+  },
+
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+
+  tabText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 
   offlineBanner: {
