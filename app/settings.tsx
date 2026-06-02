@@ -69,10 +69,12 @@ export default function Settings() {
             value={isDark}
             onValueChange={toggleTheme}
             trackColor={{
-              false: "#D1D5DB",
+              false: theme.colors.border,
               true: theme.colors.primarySoft,
             }}
-            thumbColor={isDark ? theme.colors.primary : "#FFFFFF"}
+            thumbColor={
+              isDark ? theme.colors.primary : theme.colors.surface
+            }
           />
         </View>
 

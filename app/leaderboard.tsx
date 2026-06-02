@@ -46,6 +46,13 @@ const ACTIVITY_META: Record<
   breathing: { icon: "lungs", label: "Breathing Pace" },
 };
 
+// Medal cards (ranks 1-3) have metallic backgrounds that stay the
+// same in both light and dark mode — so their text colours must be
+// fixed too, or dark-mode text inverts to cream and disappears
+// against the gold/silver/bronze.
+const MEDAL_TEXT_DARK = "#1D3557";   // primary navy — strong contrast on metals
+const MEDAL_TEXT_SUBTLE = "#1D2939"; // near-black for team name on gold (top spot)
+
 type TabKey =
   | "overall"
   | "parachute"
@@ -385,7 +392,7 @@ export default function Leaderboard() {
                         styles.rankText,
                         {
                           color: isTopThree
-                            ? theme.colors.textOnPrimary
+                            ? MEDAL_TEXT_DARK
                             : theme.colors.primary,
                         },
                       ]}
@@ -399,7 +406,9 @@ export default function Leaderboard() {
                       style={[
                         styles.score,
                         {
-                          color: theme.colors.primary,
+                          color: isTopThree
+                            ? MEDAL_TEXT_DARK
+                            : theme.colors.primary,
                         },
                       ]}
                     >
@@ -410,7 +419,9 @@ export default function Leaderboard() {
                       style={[
                         styles.scoreLabel,
                         {
-                          color: theme.colors.primarySoft,
+                          color: isTopThree
+                            ? MEDAL_TEXT_DARK
+                            : theme.colors.primarySoft,
                         },
                       ]}
                     >
@@ -426,10 +437,9 @@ export default function Leaderboard() {
                       style={[
                         styles.teamName,
                         {
-                          color:
-                            index === 0
-                              ? theme.colors.primary
-                              : theme.colors.text,
+                          color: isTopThree
+                            ? MEDAL_TEXT_SUBTLE
+                            : theme.colors.text,
                         },
                       ]}
                     >
@@ -443,7 +453,9 @@ export default function Leaderboard() {
                         style={[
                           styles.activityText,
                           {
-                            color: theme.colors.primary,
+                            color: isTopThree
+                              ? MEDAL_TEXT_DARK
+                              : theme.colors.primary,
                           },
                         ]}
                       >
