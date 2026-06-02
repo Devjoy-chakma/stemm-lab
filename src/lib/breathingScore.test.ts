@@ -1,115 +1,193 @@
 import {
+  calculateBpm,
+  calculateBreathingPhaseResult,
   calculateBreathingResult,
-  categorizeFocus,
-  CYCLE_DURATION_SECONDS,
+  detectBreathPeaks,
+  smoothMovingAverage,
+  ACCEL_SAMPLE_INTERVAL_MS,
 } from './breathingScore';
 
-describe('categorizeFocus', () => {
-  it('labels exactly 100 as Excellent', () => {
-    expect(categorizeFocus(100)).toBe('Excellent');
+/**
+ * Build a synthetic sinusoidal accelerometer trace at the given BPM
+ * for `durationSeconds` seconds, sampled every `ACCEL_SAMPLE_INTERVAL_MS`.
+ */
+function sineBreathing(
+  bpm: number,
+  durationSeconds: number,
+  amplitude = 0.05,
+  baseline = 1.0
+): number[] {
+  const samples: number[] = [];
+  const sampleHz = 1000 / ACCEL_SAMPLE_INTERVAL_MS;
+  const totalSamples = Math.round(durationSeconds * sampleHz);
+  const breathHz = bpm / 60;
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / sampleHz;
+    samples.push(baseline + amplitude * Math.sin(2 * Math.PI * breathHz * t));
+  }
+  return samples;
+}
+
+describe('smoothMovingAverage', () => {
+  it('returns an empty array for empty input', () => {
+    expect(smoothMovingAverage([])).toEqual([]);
   });
 
-  it('labels values above 100 as Excellent (defensive)', () => {
-    expect(categorizeFocus(125)).toBe('Excellent');
+  it('preserves a constant signal', () => {
+    expect(smoothMovingAverage([1, 1, 1, 1, 1], 3)).toEqual([1, 1, 1, 1, 1]);
   });
 
-  it('labels 99 as Good', () => {
-    expect(categorizeFocus(99)).toBe('Good');
+  it('smooths a noisy single spike toward neighbours', () => {
+    const out = smoothMovingAverage([1, 1, 10, 1, 1], 3);
+    // middle should be (1 + 10 + 1) / 3 = 4 (not 10)
+    expect(out[2]).toBeCloseTo(4, 5);
   });
 
-  it('labels exactly 75 as Good', () => {
-    expect(categorizeFocus(75)).toBe('Good');
+  it('returns the input when window <= 1', () => {
+    expect(smoothMovingAverage([1, 2, 3], 1)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('detectBreathPeaks', () => {
+  it('returns 0 for arrays shorter than 3', () => {
+    expect(detectBreathPeaks([])).toBe(0);
+    expect(detectBreathPeaks([1])).toBe(0);
+    expect(detectBreathPeaks([1, 2])).toBe(0);
   });
 
-  it('labels 74 as Fair', () => {
-    expect(categorizeFocus(74)).toBe('Fair');
+  it('returns 0 for a flat signal', () => {
+    const flat = new Array(50).fill(1);
+    expect(detectBreathPeaks(flat)).toBe(0);
   });
 
-  it('labels exactly 50 as Fair', () => {
-    expect(categorizeFocus(50)).toBe('Fair');
+  it('counts well-spaced peaks in a clean signal', () => {
+    // 30-second sine wave at 12 BPM → 6 peaks expected
+    const signal = sineBreathing(12, 30);
+    expect(detectBreathPeaks(signal)).toBe(6);
   });
 
-  it('labels 49 as Incomplete', () => {
-    expect(categorizeFocus(49)).toBe('Incomplete');
+  it('enforces the minimum-distance rule between peaks', () => {
+    // Two peaks too close together: should count as 1.
+    const samples = [
+      0, 0, 1, 0,   // peak at idx 2
+      0, 0, 1, 0,   // peak at idx 6 — only 4 samples after the last
+      0, 0, 0, 0,
+    ];
+    expect(detectBreathPeaks(samples, 10)).toBe(1);
+  });
+});
+
+describe('calculateBpm', () => {
+  it('returns 0 for zero duration', () => {
+    expect(calculateBpm(5, 0)).toBe(0);
   });
 
-  it('labels 0 as Incomplete', () => {
-    expect(categorizeFocus(0)).toBe('Incomplete');
+  it('returns 0 for negative peaks', () => {
+    expect(calculateBpm(-1, 30)).toBe(0);
+  });
+
+  it('computes BPM from peaks × 60 / duration', () => {
+    // 6 peaks in 30 seconds = 12 BPM
+    expect(calculateBpm(6, 30)).toBe(12);
+  });
+
+  it('rounds to an integer', () => {
+    // 5 peaks in 22 seconds = 13.636… → 14
+    expect(calculateBpm(5, 22)).toBe(14);
+  });
+});
+
+describe('calculateBreathingPhaseResult', () => {
+  it('returns null for non-positive duration', () => {
+    expect(calculateBreathingPhaseResult([1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 0)).toBeNull();
+  });
+
+  it('returns null when there are too few samples', () => {
+    expect(calculateBreathingPhaseResult([1, 1, 1], 5)).toBeNull();
+  });
+
+  it('detects ~14 BPM from a synthetic 14-BPM trace', () => {
+    const trace = sineBreathing(14, 30);
+    const result = calculateBreathingPhaseResult(trace, 30);
+    expect(result?.bpm).toBe(14);
+  });
+
+  it('detects ~24 BPM from a synthetic 24-BPM trace', () => {
+    const trace = sineBreathing(24, 30);
+    const result = calculateBreathingPhaseResult(trace, 30);
+    expect(result?.bpm).toBe(24);
+  });
+
+  it('reports duration and samples_collected unchanged', () => {
+    const trace = sineBreathing(12, 30);
+    const result = calculateBreathingPhaseResult(trace, 30);
+    expect(result?.duration_seconds).toBe(30);
+    expect(result?.samples_collected).toBe(trace.length);
   });
 });
 
 describe('calculateBreathingResult', () => {
-  it('returns null for zero target duration', () => {
-    expect(calculateBreathingResult(10, 0)).toBeNull();
+  const restTrace = sineBreathing(12, 20);
+  const exerciseTrace = sineBreathing(24, 20);
+
+  it('returns null for a negative prediction', () => {
+    expect(
+      calculateBreathingResult(restTrace, 20, exerciseTrace, 20, -1)
+    ).toBeNull();
   });
 
-  it('returns null for negative target duration', () => {
-    expect(calculateBreathingResult(10, -5)).toBeNull();
+  it('returns null when rest measurement is invalid', () => {
+    expect(
+      calculateBreathingResult([1, 1], 20, exerciseTrace, 20, 12)
+    ).toBeNull();
   });
 
-  it('returns null for negative completed duration', () => {
-    expect(calculateBreathingResult(-1, 15)).toBeNull();
+  it('returns null when exercise measurement is invalid', () => {
+    expect(
+      calculateBreathingResult(restTrace, 20, [1, 1], 20, 12)
+    ).toBeNull();
   });
 
-  it('a fully completed 15s session scores 100 Excellent', () => {
-    const result = calculateBreathingResult(15, 15);
-    expect(result?.completion_percent).toBe(100);
-    expect(result?.completion_score).toBe(100);
-    expect(result?.focus_level).toBe('Excellent');
+  it('exposes both phase results', () => {
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 12);
+    expect(result?.rest.bpm).toBe(12);
+    expect(result?.exercise.bpm).toBe(24);
   });
 
-  it('half a 15s session scores 50 Fair', () => {
-    const result = calculateBreathingResult(7.5, 15);
-    expect(result?.completion_percent).toBe(50);
-    expect(result?.focus_level).toBe('Fair');
+  it('computes bpm_increase and bpm_increase_percent', () => {
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 12);
+    expect(result?.bpm_increase).toBe(12);
+    expect(result?.bpm_increase_percent).toBe(100);
   });
 
-  it('three-quarters of a 15s session scores 75 Good', () => {
-    const result = calculateBreathingResult(11.25, 15);
-    expect(result?.completion_percent).toBe(75);
-    expect(result?.focus_level).toBe('Good');
+  it('100 prediction_accuracy for an exact rest prediction', () => {
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 12);
+    expect(result?.rest_prediction_error).toBe(0);
+    expect(result?.rest_prediction_accuracy).toBe(100);
   });
 
-  it('a zero-duration session scores 0 Incomplete', () => {
-    const result = calculateBreathingResult(0, 15);
-    expect(result?.completion_percent).toBe(0);
-    expect(result?.focus_level).toBe('Incomplete');
+  it('partial accuracy when prediction is off', () => {
+    // Predict 7 when actual is 12 → off by 5 → (1 - 5/20)*100 = 75
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 7);
+    expect(result?.rest_prediction_error).toBe(5);
+    expect(result?.rest_prediction_accuracy).toBe(75);
   });
 
-  it('clamps duration that exceeds the target', () => {
-    const result = calculateBreathingResult(30, 15);
-    expect(result?.duration_completed_seconds).toBe(15);
-    expect(result?.completion_percent).toBe(100);
+  it('0 accuracy when off by 20 BPM or more', () => {
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 40);
+    expect(result?.rest_prediction_accuracy).toBe(0);
   });
 
-  it('reports target_duration_seconds unchanged', () => {
-    const result = calculateBreathingResult(5, 15);
-    expect(result?.target_duration_seconds).toBe(15);
+  it('completion_score equals rest_prediction_accuracy', () => {
+    const result = calculateBreathingResult(restTrace, 20, exerciseTrace, 20, 12);
+    expect(result?.completion_score).toBe(result?.rest_prediction_accuracy);
   });
 
-  it('counts approximately 2 breathing cycles in a 15s session', () => {
-    // 15 / 8 = 1.875 → rounds to 2
-    const result = calculateBreathingResult(15, 15);
-    expect(result?.breathing_cycles).toBe(2);
-  });
-
-  it('counts exactly 1 cycle in a single CYCLE_DURATION_SECONDS', () => {
-    const result = calculateBreathingResult(
-      CYCLE_DURATION_SECONDS,
-      CYCLE_DURATION_SECONDS
-    );
-    expect(result?.breathing_cycles).toBe(1);
-  });
-
-  it('counts 0 cycles for a zero-length session', () => {
-    const result = calculateBreathingResult(0, 15);
-    expect(result?.breathing_cycles).toBe(0);
-  });
-
-  it('returns an integer completion_score', () => {
-    const result = calculateBreathingResult(10, 15);
-    // 10/15 = 0.666… → 67 (rounded)
-    expect(result?.completion_score).toBe(67);
-    expect(Number.isInteger(result?.completion_score)).toBe(true);
+  it('bpm_increase_percent is 0 if rest.bpm is 0', () => {
+    // Flat trace at the smoothing baseline produces 0 peaks → 0 BPM
+    const flat = new Array(200).fill(1.0);
+    const result = calculateBreathingResult(flat, 20, exerciseTrace, 20, 0);
+    expect(result?.rest.bpm).toBe(0);
+    expect(result?.bpm_increase_percent).toBe(0);
   });
 });
