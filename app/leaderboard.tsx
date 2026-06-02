@@ -1,6 +1,14 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
 import {
+  collection,
+  limit as fbLimit,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -9,6 +17,8 @@ import {
 } from "react-native";
 
 import { getLeaderboard } from "../src/database/repositories/attemptRepository";
+import { db } from "../src/lib/firebase";
+import { LEADERBOARD_COLLECTION } from "../src/lib/leaderboardSync";
 import { useTheme } from "../src/theme";
 
 const ACTIVITY_META: Record<
@@ -54,17 +64,51 @@ export default function Leaderboard() {
   const { theme } = useTheme();
 
   const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingOfflineFallback, setUsingOfflineFallback] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadLeaderboard();
-    }, [])
-  );
+  // Subscribe to Firestore (real-time). If the read fails (offline, no
+  // permissions, etc.), fall back to the locally-persisted SQLite
+  // leaderboard so the screen still shows something useful.
+  useEffect(() => {
+    let active = true;
 
-  const loadLeaderboard = async () => {
-    const data = await getLeaderboard();
-    setRows(data);
-  };
+    const q = query(
+      collection(db, LEADERBOARD_COLLECTION),
+      orderBy("score", "desc"),
+      fbLimit(100)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!active) return;
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setRows(data);
+        setUsingOfflineFallback(false);
+        setLoading(false);
+      },
+      async (err) => {
+        console.warn("Firestore leaderboard read failed:", err);
+        if (!active) return;
+        try {
+          const localRows = await getLeaderboard();
+          if (!active) return;
+          setRows(localRows as any[]);
+          setUsingOfflineFallback(true);
+        } catch (e) {
+          console.warn("SQLite leaderboard fallback also failed:", e);
+        } finally {
+          if (active) setLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, []);
 
   const getRankBadge = (index: number) => {
     if (index === 0) return "🥇";
@@ -139,8 +183,27 @@ export default function Leaderboard() {
         </View>
       </View>
 
-      {/* EMPTY */}
-      {rows.length === 0 ? (
+      {usingOfflineFallback ? (
+        <View
+          style={[
+            styles.offlineBanner,
+            { backgroundColor: theme.colors.surfaceMuted },
+          ]}
+        >
+          <Text
+            style={[styles.offlineBannerText, { color: theme.colors.textMuted }]}
+          >
+            Offline — showing saved scores
+          </Text>
+        </View>
+      ) : null}
+
+      {/* LOADING / EMPTY / LIST */}
+      {loading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : rows.length === 0 ? (
         <View style={styles.emptyState}>
           <Text
             style={[
@@ -167,7 +230,7 @@ export default function Leaderboard() {
       ) : (
         <FlatList
           data={rows}
-          keyExtractor={(item) => String(item.attempt_id)}
+          keyExtractor={(item) => String(item.id ?? item.attempt_id)}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => {
@@ -380,6 +443,18 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 20,
     fontWeight: "700",
+  },
+
+  offlineBanner: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+
+  offlineBannerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 
   emptyState: {

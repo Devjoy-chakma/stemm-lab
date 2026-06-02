@@ -1,24 +1,57 @@
+import {
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+} from 'firebase/firestore';
+
 import type { Attempt } from '../stores/useAttemptStore';
 import type { Team } from '../stores/useTeamStore';
+import { db } from './firebase';
 
+export const LEADERBOARD_COLLECTION = 'leaderboard_entries';
+
+/**
+ * Shape of a leaderboard document as STORED in Firestore.
+ * Note `completed_at` is a Timestamp when read back, but a FieldValue
+ * sentinel (serverTimestamp()) at write time.
+ */
 export interface LeaderboardEntry {
   discriminator: string;
+  team_name: string;
   activity_id: string;
   score: number;
   year_level: number;
-  completed_at: number;
+  completed_at: Timestamp | null;
+  attempt_id: string;
 }
 
 /**
- * Sends a leaderboard entry to Firestore.
+ * Outcome of a sendToLeaderboard call.
  *
- * SCRUM-31 will replace this stub with a real Firestore write.
- * Returns a promise so the UI can show loading + success/error states now.
+ *   written        – the doc was created or upgraded with a higher score
+ *   skipped_lower  – existing doc has a higher score; nothing written
+ *   skipped_equal  – existing doc has the same score; nothing written
+ */
+export interface SendResult {
+  status: 'written' | 'skipped_lower' | 'skipped_equal';
+  previousScore: number | null;
+  newScore: number;
+}
+
+/**
+ * Write the team's score for an activity to Firestore, keeping
+ * best-score-wins semantics: one doc per (team, activity), and writes
+ * only overwrite if the new score is strictly higher than the existing.
+ *
+ * Doc id is `${discriminator}_${activity_id}` so reads/updates are
+ * deterministic without needing a query.
  */
 export async function sendToLeaderboard(
   attempt: Attempt,
   team: Team
-): Promise<LeaderboardEntry> {
+): Promise<SendResult> {
   if (attempt.score === null) {
     throw new Error('Attempt has no score yet — cannot send to leaderboard');
   }
@@ -26,21 +59,32 @@ export async function sendToLeaderboard(
     throw new Error('Attempt is not finished yet — cannot send to leaderboard');
   }
 
-  const entry: LeaderboardEntry = {
+  const docId = `${team.discriminator}_${attempt.activity_id}`;
+  const ref = doc(db, LEADERBOARD_COLLECTION, docId);
+
+  const existingSnap = await getDoc(ref);
+  const previousScore = existingSnap.exists()
+    ? ((existingSnap.data()?.score ?? null) as number | null)
+    : null;
+
+  if (previousScore !== null) {
+    if (attempt.score < previousScore) {
+      return { status: 'skipped_lower', previousScore, newScore: attempt.score };
+    }
+    if (attempt.score === previousScore) {
+      return { status: 'skipped_equal', previousScore, newScore: attempt.score };
+    }
+  }
+
+  await setDoc(ref, {
     discriminator: team.discriminator,
+    team_name: team.team_name,
     activity_id: attempt.activity_id,
     score: attempt.score,
     year_level: team.grade_level,
-    completed_at: attempt.finished_at,
-  };
+    completed_at: serverTimestamp(),
+    attempt_id: attempt.attempt_id,
+  });
 
-  // SCRUM-31: replace this with a real Firestore write
-  //   const ref = doc(db, 'leaderboard_entries', `${entry.discriminator}_${entry.activity_id}`);
-  //   await setDoc(ref, entry);
-  console.log('[leaderboardSync stub] Would send:', entry);
-
-  // Simulate network latency so the UI shows a real loading state
-  await new Promise((resolve) => setTimeout(resolve, 800));
-
-  return entry;
+  return { status: 'written', previousScore, newScore: attempt.score };
 }
