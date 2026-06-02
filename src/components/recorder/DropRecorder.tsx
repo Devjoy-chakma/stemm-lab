@@ -18,6 +18,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
+import { haptic } from '../../lib/haptics';
 import { makeParachuteVideoPath, uploadVideo } from '../../lib/mediaUpload';
 
 export interface DropRecording {
@@ -125,6 +126,7 @@ export default function DropRecorder({
   const startRecording = async () => {
     if (!cameraRef.current || mode !== 'idle') return;
 
+    haptic.medium();
     setRecording(null);
     setElapsed(0);
     setMode('recording');
@@ -155,6 +157,7 @@ export default function DropRecorder({
 
   const stopRecording = () => {
     if (cameraRef.current && mode === 'recording') {
+      haptic.medium();
       cameraRef.current.stopRecording();
     }
   };
@@ -172,8 +175,10 @@ export default function DropRecorder({
         recording.uri,
         makeParachuteVideoPath(recording.uri)
       );
+      haptic.success();
     } catch (e) {
       console.warn('Video upload failed, continuing without URL:', e);
+      haptic.warning();
     }
 
     onConfirm({
@@ -195,6 +200,7 @@ export default function DropRecorder({
   };
 
   const handleDiscard = async () => {
+    haptic.light();
     if (recording) {
       try {
         await FileSystem.deleteAsync(recording.uri, { idempotent: true });

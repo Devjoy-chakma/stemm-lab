@@ -19,6 +19,7 @@ import ActivityShell from '../components/ActivityShell';
 import MetricCard from '../components/MetricCard';
 import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
+import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import {
   calculateSoundPollutionResult,
@@ -181,6 +182,7 @@ try {
     setScore(result.pollution_score);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
   };
 
   const handleTryAgain = () => {
@@ -209,8 +211,10 @@ try {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert('Sent!', 'Your score is on the leaderboard.');
     } catch (e: any) {
+      haptic.error();
       Alert.alert('Send failed', e.message ?? 'Unknown error');
     } finally {
       setSending(false);

@@ -15,6 +15,7 @@ import {
 
 import { findTeamByCredentials } from "../src/database/repositories/teamRepository";
 
+import { haptic } from "../src/lib/haptics";
 import { useTeamStore } from "../src/stores";
 
 import { useTheme } from "../src/theme";
@@ -34,12 +35,14 @@ export default function TeamSignIn() {
 
   async function handleSignIn() {
     if (!teamName.trim()) {
+      haptic.error();
       Alert.alert("Missing team name", "Please enter your team name.");
 
       return;
     }
 
     if (teamPin.length !== 4) {
+      haptic.error();
       Alert.alert("Invalid PIN", "PIN must be exactly 4 digits.");
 
       return;
@@ -51,11 +54,13 @@ export default function TeamSignIn() {
       const team = await findTeamByCredentials(teamName, teamPin);
 
       if (!team) {
+        haptic.error();
         Alert.alert("Invalid credentials", "Incorrect team name or PIN.");
 
         return;
       }
 
+      haptic.success();
       setTeam({
         team_id: String(team.team_id),
 

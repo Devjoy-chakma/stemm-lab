@@ -21,6 +21,7 @@ import {
   calculateBreathingPhaseResult,
   calculateBreathingResult,
 } from "../lib/breathingScore";
+import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
@@ -195,6 +196,7 @@ export default function BreathingPace() {
     setScore(r.completion_score);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
   };
 
   const handleTryAgain = () => {
@@ -229,8 +231,10 @@ export default function BreathingPace() {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert("Sent!", "Your score is on the leaderboard.");
     } catch (e: any) {
+      haptic.error();
       Alert.alert("Send failed", e.message ?? "Unknown error");
     } finally {
       setSending(false);

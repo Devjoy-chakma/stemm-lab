@@ -16,6 +16,7 @@ import {
 import ActivityShell from "../components/ActivityShell";
 import MetricCard from "../components/MetricCard";
 
+import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { calculateReactionBoardResult } from "../lib/reactionScore";
@@ -134,6 +135,7 @@ export default function ReactionBoard() {
 
   const handleReactionTap = () => {
     if (!showTap) return;
+    haptic.light();
     const reaction = Date.now() - startTimeRef.current;
     setShowTap(false);
     setWaitingForTap(false);
@@ -318,6 +320,7 @@ export default function ReactionBoard() {
     setScore(result.overall_score);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
   };
 
   const handleTryAgain = () => {
@@ -351,8 +354,10 @@ export default function ReactionBoard() {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert("Sent!", "Your score is on the leaderboard.");
     } catch (e: any) {
+      haptic.error();
       Alert.alert("Send failed", e.message ?? "Unknown error");
     } finally {
       setSending(false);

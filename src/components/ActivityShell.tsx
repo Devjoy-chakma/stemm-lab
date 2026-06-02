@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { useTheme } from '../theme';
+import { haptic } from '../lib/haptics';
 import { useSettingsStore } from '../stores';
 import type { ActivityShellProps, TabKey } from './ActivityShell.types';
 
@@ -113,7 +114,10 @@ export default function ActivityShell({
           return (
             <TouchableOpacity
               key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => {
+                if (!isActive) haptic.selection();
+                setActiveTab(tab.key);
+              }}
               style={[
                 styles.tab,
                 isActive && {

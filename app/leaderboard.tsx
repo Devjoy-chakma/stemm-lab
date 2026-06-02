@@ -20,6 +20,7 @@ import {
 
 import { getLeaderboard } from "../src/database/repositories/attemptRepository";
 import { db } from "../src/lib/firebase";
+import { haptic } from "../src/lib/haptics";
 import {
   computeTeamTotals,
   rankActivity,
@@ -229,7 +230,10 @@ export default function Leaderboard() {
           return (
             <TouchableOpacity
               key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => {
+                if (!active) haptic.selection();
+                setActiveTab(tab.key);
+              }}
               style={[
                 styles.tab,
                 {

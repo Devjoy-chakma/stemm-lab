@@ -14,6 +14,7 @@ import {
 } from "react-native";
 
 import { createTeamSession } from "../src/database/repositories/teamRepository";
+import { haptic } from "../src/lib/haptics";
 import { useTeamStore } from "../src/stores";
 import { useTheme } from "../src/theme";
 
@@ -66,6 +67,7 @@ export default function TeamSignUp() {
     const numericGrade = Number(gradeLevel);
 
     if (cleanTeamName.length < 2 || cleanTeamName.length > 20) {
+      haptic.error();
       Alert.alert("Invalid team name", "Team name must be 2–20 characters.");
 
       return;
@@ -76,18 +78,21 @@ export default function TeamSignUp() {
       numericGrade < 3 ||
       numericGrade > 9
     ) {
+      haptic.error();
       Alert.alert("Invalid grade", "Grade level must be between 3 and 9.");
 
       return;
     }
 
     if (cleanMembers.length === 0) {
+      haptic.error();
       Alert.alert("Missing members", "Add at least one team member.");
 
       return;
     }
 
     if (teamPin.length !== 4) {
+      haptic.error();
       Alert.alert("Invalid PIN", "PIN must be exactly 4 digits.");
 
       return;
@@ -114,6 +119,7 @@ export default function TeamSignUp() {
         })),
         created_at: Date.now(),
       });
+      haptic.success();
       router.dismissAll();
       router.replace("/home");
     } catch (error) {

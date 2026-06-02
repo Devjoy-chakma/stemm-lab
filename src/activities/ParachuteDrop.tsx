@@ -13,6 +13,7 @@ import DropRecorder, { DropRecording } from '../components/recorder/DropRecorder
 import MetricCard from '../components/MetricCard';
 import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
+import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import {
   calculateParachuteResult,
@@ -88,6 +89,7 @@ export default function ParachuteDrop() {
     setScore(result.dragScore);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
   };
 
   const handleWriteUpChange = (text: string) => {
@@ -116,8 +118,10 @@ export default function ParachuteDrop() {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert('Sent!', 'Your score is on the leaderboard.');
     } catch (e: any) {
+      haptic.error();
       Alert.alert('Send failed', e.message ?? 'Unknown error');
     } finally {
       setSending(false);
