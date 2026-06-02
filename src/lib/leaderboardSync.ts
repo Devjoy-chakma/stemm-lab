@@ -23,6 +23,8 @@ export interface LeaderboardEntry {
   activity_id: string;
   score: number;
   year_level: number;
+  gps_lat: number | null;
+  gps_lng: number | null;
   completed_at: Timestamp | null;
   attempt_id: string;
 }
@@ -82,6 +84,8 @@ export async function sendToLeaderboard(
     activity_id: attempt.activity_id,
     score: attempt.score,
     year_level: team.grade_level,
+    gps_lat: attempt.gps_lat,
+    gps_lng: attempt.gps_lng,
     completed_at: serverTimestamp(),
     attempt_id: attempt.attempt_id,
   });

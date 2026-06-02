@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS activity_attempts (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   status TEXT NOT NULL,
+  gps_lat REAL,
+  gps_lng REAL,
   FOREIGN KEY(team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
   FOREIGN KEY(activity_id) REFERENCES activities(activity_id)
 );

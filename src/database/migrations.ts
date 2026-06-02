@@ -25,9 +25,11 @@ import {
 //   v1 — initial schema (no version recorded; pre-migration system)
 //   v2 — added `team_pin` column to `teams` (sign-up now requires a
 //        4-digit PIN; existing dev databases were missing this column).
+//   v3 — added `gps_lat` and `gps_lng` columns to `activity_attempts`
+//        for the GPS location-tagging feature.
 // =====================================================================
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 type DB = Awaited<ReturnType<typeof getDatabase>>;
 type Migration = (db: DB) => Promise<void>;
@@ -45,6 +47,26 @@ const MIGRATIONS: Record<number, Migration> = {
       );
     } catch {
       // Column already present — fresh install, or migration already ran.
+    }
+  },
+
+  // 2 → 3: add gps_lat / gps_lng to activity_attempts so each persisted
+  // attempt can carry the GPS coordinates captured when it was started.
+  // Both columns are nullable — old rows just stay null.
+  3: async (db) => {
+    try {
+      await db.execAsync(
+        `ALTER TABLE activity_attempts ADD COLUMN gps_lat REAL`
+      );
+    } catch {
+      // Column already present.
+    }
+    try {
+      await db.execAsync(
+        `ALTER TABLE activity_attempts ADD COLUMN gps_lng REAL`
+      );
+    } catch {
+      // Column already present.
     }
   },
 };

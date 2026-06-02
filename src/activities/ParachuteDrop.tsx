@@ -15,6 +15,7 @@ import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
+import { getCurrentLocationOrNull } from '../lib/location';
 import {
   calculateParachuteResult,
   calculateImprovement,
@@ -30,6 +31,7 @@ export default function ParachuteDrop() {
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
 
@@ -50,6 +52,9 @@ export default function ParachuteDrop() {
   useEffect(() => {
     const teamId = team?.team_id ?? 'demo-team';
     startAttempt(teamId, 'parachute');
+    getCurrentLocationOrNull().then((loc) => {
+      if (loc) setLocation(loc.lat, loc.lng);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

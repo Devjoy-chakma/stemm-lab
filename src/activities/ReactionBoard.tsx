@@ -18,6 +18,7 @@ import MetricCard from "../components/MetricCard";
 
 import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { getCurrentLocationOrNull } from "../lib/location";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { calculateReactionBoardResult } from "../lib/reactionScore";
 import { useAttemptStore, useTeamStore } from "../stores";
@@ -45,6 +46,7 @@ export default function ReactionBoard() {
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const getPreviousAttemptForActivity = useAttemptStore(
@@ -102,6 +104,9 @@ export default function ReactionBoard() {
   useEffect(() => {
     const teamId = team?.team_id ?? "demo-team";
     startAttempt(teamId, "reaction");
+    getCurrentLocationOrNull().then((loc) => {
+      if (loc) setLocation(loc.lat, loc.lng);
+    });
 
     return () => {
       if (promptTimeoutRef.current) clearTimeout(promptTimeoutRef.current);

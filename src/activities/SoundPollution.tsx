@@ -21,6 +21,7 @@ import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
+import { getCurrentLocationOrNull } from '../lib/location';
 import {
   calculateSoundPollutionResult,
   dbfsToNoiseLevel,
@@ -41,6 +42,7 @@ export default function SoundPollution() {
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
 
@@ -86,6 +88,8 @@ useEffect(() => {
       setPermissionGranted(status.granted);
       const teamId = team?.team_id ?? 'demo-team';
       startAttempt(teamId, 'sound');
+      const loc = await getCurrentLocationOrNull();
+      if (loc) setLocation(loc.lat, loc.lng);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

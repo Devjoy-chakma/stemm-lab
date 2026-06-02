@@ -52,6 +52,12 @@
         {
           "microphonePermission": "STEMM-Lab needs microphone access to measure noise pollution."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "STEMMLab tags your activity attempts with location so you can see your team's results on a map."
+        }
       ]
     ]
   }

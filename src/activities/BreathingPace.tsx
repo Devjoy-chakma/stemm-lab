@@ -23,6 +23,7 @@ import {
 } from "../lib/breathingScore";
 import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { getCurrentLocationOrNull } from "../lib/location";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
@@ -44,6 +45,7 @@ export default function BreathingPace() {
   const startAttempt = useAttemptStore((s) => s.startAttempt);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const getPreviousAttemptForActivity = useAttemptStore(
@@ -77,6 +79,9 @@ export default function BreathingPace() {
   useEffect(() => {
     const teamId = team?.team_id ?? "demo-team";
     startAttempt(teamId, "breathing");
+    getCurrentLocationOrNull().then((loc) => {
+      if (loc) setLocation(loc.lat, loc.lng);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

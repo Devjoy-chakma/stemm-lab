@@ -107,8 +107,9 @@ export async function persistAttempt(attempt: Attempt): Promise<void> {
 
     const result = await db.runAsync(
       `INSERT INTO activity_attempts
-         (team_id, activity_id, attempt_number, started_at, completed_at, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (team_id, activity_id, attempt_number, started_at, completed_at,
+          status, gps_lat, gps_lng)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         teamId,
         attempt.activity_id,
@@ -116,6 +117,8 @@ export async function persistAttempt(attempt: Attempt): Promise<void> {
         startedAt,
         completedAt,
         attempt.finished_at !== null ? "completed" : "in_progress",
+        attempt.gps_lat,
+        attempt.gps_lng,
       ]
     );
 

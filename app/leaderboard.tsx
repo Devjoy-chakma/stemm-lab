@@ -218,7 +218,17 @@ export default function Leaderboard() {
             </Text>
           </View>
 
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            style={styles.headerBackButton}
+            onPress={() => router.push("/map")}
+            accessibilityLabel="Open map view"
+          >
+            <MaterialCommunityIcons
+              name="map-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
