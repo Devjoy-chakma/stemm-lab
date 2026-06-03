@@ -1,10 +1,14 @@
 import { useRouter } from "expo-router";
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { useBattery } from "../src/lib/battery";
 import { useTheme } from "../src/theme";
 
 export default function Settings() {
   const router = useRouter();
   const { theme, toggleTheme, isDark } = useTheme();
+  const { level, charging } = useBattery();
+  const batteryPct = Math.round(level * 100);
+  const lowBattery = batteryPct < 20 && !charging;
 
   // Theme helpers
   const textPrimary = { color: theme.colors.primary };
@@ -86,6 +90,26 @@ export default function Settings() {
         <View style={[styles.settingRow, rowBorder]}>
           <Text style={[styles.settingText, textMuted, styles.italicText]}>
             SCRUM-29 will build this
+          </Text>
+        </View>
+
+        {/* Device */}
+        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
+          Device
+        </Text>
+
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textPrimary]}>Battery</Text>
+          <Text
+            style={[
+              styles.settingText,
+              {
+                color: lowBattery ? theme.colors.danger : theme.colors.primary,
+                fontVariant: ["tabular-nums"],
+              },
+            ]}
+          >
+            {batteryPct}%{charging ? "  ⚡" : ""}
           </Text>
         </View>
 
