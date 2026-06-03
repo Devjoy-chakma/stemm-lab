@@ -7,6 +7,7 @@ import {
   CREATE_ATTEMPT_RESULTS_TABLE,
   CREATE_MEDIA_FILES_TABLE,
   CREATE_META_TABLE,
+  CREATE_PENDING_SYNC_TABLE,
   CREATE_TEAMS_TABLE,
   CREATE_TEAM_MEMBERS_TABLE,
   CREATE_USERS_TABLE,
@@ -27,9 +28,12 @@ import {
 //        4-digit PIN; existing dev databases were missing this column).
 //   v3 — added `gps_lat` and `gps_lng` columns to `activity_attempts`
 //        for the GPS location-tagging feature.
+//   v4 — added `pending_sync` queue table for the background-sync task
+//        that retries failed leaderboard writes when connectivity
+//        comes back.
 // =====================================================================
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 type DB = Awaited<ReturnType<typeof getDatabase>>;
 type Migration = (db: DB) => Promise<void>;
@@ -69,6 +73,13 @@ const MIGRATIONS: Record<number, Migration> = {
       // Column already present.
     }
   },
+
+  // 3 → 4: introduce the pending_sync queue table used by the
+  // background-sync task. CREATE TABLE IF NOT EXISTS is idempotent
+  // so a fresh install (where step 1 already created it) is fine.
+  4: async (db) => {
+    await db.execAsync(CREATE_PENDING_SYNC_TABLE);
+  },
 };
 
 export async function runMigrations() {
@@ -87,6 +98,7 @@ export async function runMigrations() {
     await db.execAsync(CREATE_MEDIA_FILES_TABLE);
     await db.execAsync(CREATE_APP_SETTINGS_TABLE);
     await db.execAsync(CREATE_META_TABLE);
+    await db.execAsync(CREATE_PENDING_SYNC_TABLE);
 
     // 2. Read the recorded schema version. Databases set up before this
     //    migration system existed have an empty _meta table — treat

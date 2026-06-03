@@ -6,6 +6,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 
+import { queuePendingSync } from '../database/repositories/attemptRepository';
 import type { Attempt } from '../stores/useAttemptStore';
 import type { Team } from '../stores/useTeamStore';
 import { db } from './firebase';
@@ -64,31 +65,56 @@ export async function sendToLeaderboard(
   const docId = `${team.discriminator}_${attempt.activity_id}`;
   const ref = doc(db, LEADERBOARD_COLLECTION, docId);
 
-  const existingSnap = await getDoc(ref);
-  const previousScore = existingSnap.exists()
-    ? ((existingSnap.data()?.score ?? null) as number | null)
-    : null;
+  try {
+    const existingSnap = await getDoc(ref);
+    const previousScore = existingSnap.exists()
+      ? ((existingSnap.data()?.score ?? null) as number | null)
+      : null;
 
-  if (previousScore !== null) {
-    if (attempt.score < previousScore) {
-      return { status: 'skipped_lower', previousScore, newScore: attempt.score };
+    if (previousScore !== null) {
+      if (attempt.score < previousScore) {
+        return {
+          status: 'skipped_lower',
+          previousScore,
+          newScore: attempt.score,
+        };
+      }
+      if (attempt.score === previousScore) {
+        return {
+          status: 'skipped_equal',
+          previousScore,
+          newScore: attempt.score,
+        };
+      }
     }
-    if (attempt.score === previousScore) {
-      return { status: 'skipped_equal', previousScore, newScore: attempt.score };
-    }
+
+    await setDoc(ref, {
+      discriminator: team.discriminator,
+      team_name: team.team_name,
+      activity_id: attempt.activity_id,
+      score: attempt.score,
+      year_level: team.grade_level,
+      gps_lat: attempt.gps_lat,
+      gps_lng: attempt.gps_lng,
+      completed_at: serverTimestamp(),
+      attempt_id: attempt.attempt_id,
+    });
+
+    return { status: 'written', previousScore, newScore: attempt.score };
+  } catch (error) {
+    // Likely offline or Firestore unreachable. Queue for the background
+    // sync task to retry, then surface the error so the caller can
+    // still show a "send failed" alert.
+    await queuePendingSync({
+      discriminator: team.discriminator,
+      team_name: team.team_name,
+      activity_id: attempt.activity_id,
+      score: attempt.score,
+      grade_level: team.grade_level,
+      gps_lat: attempt.gps_lat,
+      gps_lng: attempt.gps_lng,
+      attempt_uid: attempt.attempt_id,
+    });
+    throw error;
   }
-
-  await setDoc(ref, {
-    discriminator: team.discriminator,
-    team_name: team.team_name,
-    activity_id: attempt.activity_id,
-    score: attempt.score,
-    year_level: team.grade_level,
-    gps_lat: attempt.gps_lat,
-    gps_lng: attempt.gps_lng,
-    completed_at: serverTimestamp(),
-    attempt_id: attempt.attempt_id,
-  });
-
-  return { status: 'written', previousScore, newScore: attempt.score };
 }

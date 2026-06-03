@@ -145,6 +145,95 @@ export async function persistAttempt(attempt: Attempt): Promise<void> {
     console.error("Failed to persist attempt:", error);
   }
 }
+// =====================================================================
+// pending_sync queue — entries the background task retries when the
+// device next has connectivity.
+// =====================================================================
+
+export interface PendingSyncRow {
+  pending_id: number;
+  discriminator: string;
+  team_name: string;
+  activity_id: string;
+  score: number;
+  grade_level: number;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  attempt_uid: string;
+  queued_at: string;
+}
+
+export interface PendingSyncInput {
+  discriminator: string;
+  team_name: string;
+  activity_id: string;
+  score: number;
+  grade_level: number;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  attempt_uid: string;
+}
+
+export async function queuePendingSync(input: PendingSyncInput): Promise<void> {
+  try {
+    const db = await getDatabase();
+    await db.runAsync(
+      `INSERT INTO pending_sync
+         (discriminator, team_name, activity_id, score, grade_level,
+          gps_lat, gps_lng, attempt_uid, queued_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.discriminator,
+        input.team_name,
+        input.activity_id,
+        input.score,
+        input.grade_level,
+        input.gps_lat,
+        input.gps_lng,
+        input.attempt_uid,
+        new Date().toISOString(),
+      ]
+    );
+  } catch (error) {
+    console.error("Failed to queue pending sync:", error);
+  }
+}
+
+export async function listPendingSync(): Promise<PendingSyncRow[]> {
+  try {
+    const db = await getDatabase();
+    return await db.getAllAsync<PendingSyncRow>(
+      `SELECT * FROM pending_sync ORDER BY pending_id ASC`
+    );
+  } catch (error) {
+    console.error("Failed to list pending_sync:", error);
+    return [];
+  }
+}
+
+export async function countPendingSync(): Promise<number> {
+  try {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM pending_sync`
+    );
+    return row?.n ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function removePendingSync(pendingId: number): Promise<void> {
+  try {
+    const db = await getDatabase();
+    await db.runAsync(`DELETE FROM pending_sync WHERE pending_id = ?`, [
+      pendingId,
+    ]);
+  } catch (error) {
+    console.error("Failed to remove pending_sync row:", error);
+  }
+}
+
 export async function getLeaderboard() {
   const db = await getDatabase();
 

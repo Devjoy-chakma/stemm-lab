@@ -117,3 +117,21 @@ CREATE TABLE IF NOT EXISTS _meta (
   schema_version INTEGER NOT NULL
 );
 `;
+
+// Queue of leaderboard sends that failed (e.g. offline or Firestore
+// unreachable). The background sync task drains this table when the
+// device next has connectivity.
+export const CREATE_PENDING_SYNC_TABLE = `
+CREATE TABLE IF NOT EXISTS pending_sync (
+  pending_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discriminator TEXT NOT NULL,
+  team_name TEXT NOT NULL,
+  activity_id TEXT NOT NULL,
+  score REAL NOT NULL,
+  grade_level INTEGER NOT NULL,
+  gps_lat REAL,
+  gps_lng REAL,
+  attempt_uid TEXT NOT NULL,
+  queued_at TEXT NOT NULL
+);
+`;
