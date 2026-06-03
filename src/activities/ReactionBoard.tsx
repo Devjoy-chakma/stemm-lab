@@ -19,6 +19,7 @@ import MetricCard from "../components/MetricCard";
 import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { getCurrentLocationOrNull } from "../lib/location";
+import { notifyActivityScored } from "../lib/notifications";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { calculateReactionBoardResult } from "../lib/reactionScore";
 import { useAttemptStore, useTeamStore } from "../stores";
@@ -326,6 +327,11 @@ export default function ReactionBoard() {
     finishAttempt();
     setSubmitted(true);
     haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? "Your team",
+      "Reaction Board",
+      result.overall_score
+    );
   };
 
   const handleTryAgain = () => {

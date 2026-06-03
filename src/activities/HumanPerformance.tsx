@@ -22,6 +22,7 @@ import {
 import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { getCurrentLocationOrNull } from "../lib/location";
+import { notifyActivityScored } from "../lib/notifications";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
@@ -199,6 +200,13 @@ export default function HumanPerformance() {
   const handleSubmit = () => {
     setSubmitted(true);
     haptic.success();
+    if (result) {
+      notifyActivityScored(
+        team?.team_name ?? "Your team",
+        "Human Performance",
+        result.smoothness_score
+      );
+    }
   };
 
   const handleTryAgain = () => {

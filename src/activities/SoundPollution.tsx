@@ -22,6 +22,7 @@ import { useAttemptStore, useTeamStore } from '../stores';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import { getCurrentLocationOrNull } from '../lib/location';
+import { notifyActivityScored } from '../lib/notifications';
 import {
   calculateSoundPollutionResult,
   dbfsToNoiseLevel,
@@ -187,6 +188,11 @@ try {
     finishAttempt();
     setSubmitted(true);
     haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? 'Your team',
+      'Sound Pollution',
+      result.pollution_score
+    );
   };
 
   const handleTryAgain = () => {

@@ -24,6 +24,7 @@ import {
 import { haptic } from "../lib/haptics";
 import { sendToLeaderboard } from "../lib/leaderboardSync";
 import { getCurrentLocationOrNull } from "../lib/location";
+import { notifyActivityScored } from "../lib/notifications";
 import { calculateImprovement } from "../lib/parachuteScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
@@ -202,6 +203,11 @@ export default function BreathingPace() {
     finishAttempt();
     setSubmitted(true);
     haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? "Your team",
+      "Breathing Pace",
+      r.completion_score
+    );
   };
 
   const handleTryAgain = () => {

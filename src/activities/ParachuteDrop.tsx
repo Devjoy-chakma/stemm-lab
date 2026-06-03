@@ -16,6 +16,7 @@ import { useAttemptStore, useTeamStore } from '../stores';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import { getCurrentLocationOrNull } from '../lib/location';
+import { notifyActivityScored } from '../lib/notifications';
 import {
   calculateParachuteResult,
   calculateImprovement,
@@ -95,6 +96,11 @@ export default function ParachuteDrop() {
     finishAttempt();
     setSubmitted(true);
     haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? 'Your team',
+      'Parachute Drop',
+      result.dragScore
+    );
   };
 
   const handleWriteUpChange = (text: string) => {
