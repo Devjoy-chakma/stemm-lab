@@ -14,6 +14,7 @@ import {
 } from "react-native";
 
 import { createTeamSession } from "../src/database/repositories/teamRepository";
+import { ensureAnonymousAuth } from "../src/lib/auth";
 import { haptic } from "../src/lib/haptics";
 import { useTeamStore } from "../src/stores";
 import { useTheme } from "../src/theme";
@@ -109,11 +110,17 @@ export default function TeamSignUp() {
         memberNames: cleanMembers,
       });
 
+      // Sign in to Firebase Anonymous Auth so Firestore writes are
+      // authenticated. The team identity stays driven by the PIN flow;
+      // the UID is just for security/rule-tightening.
+      const firebase_uid = await ensureAnonymousAuth();
+
       setTeam({
         team_id: String(teamId),
         team_name: cleanTeamName,
         grade_level: numericGrade,
         discriminator,
+        firebase_uid,
         members: cleanMembers.map((first_name) => ({
           first_name,
         })),

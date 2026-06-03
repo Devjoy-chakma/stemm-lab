@@ -12,6 +12,7 @@ export interface Team {
   team_name: string;
   grade_level: number;          // 3 to 9 (was: year_level)
   discriminator: string;        // STEM-#### code, used in the leaderboard
+  firebase_uid: string | null;  // Firebase Anonymous Auth UID; null if auth failed
   members: TeamMember[];
   created_at: number;           // Date.now()
 }

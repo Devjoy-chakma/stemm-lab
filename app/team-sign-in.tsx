@@ -15,6 +15,7 @@ import {
 
 import { findTeamByCredentials } from "../src/database/repositories/teamRepository";
 
+import { ensureAnonymousAuth } from "../src/lib/auth";
 import { haptic } from "../src/lib/haptics";
 import { useTeamStore } from "../src/stores";
 
@@ -60,6 +61,10 @@ export default function TeamSignIn() {
         return;
       }
 
+      // Backend Firebase auth so Firestore writes from this session
+      // are authenticated. Surface-level UX is unchanged.
+      const firebase_uid = await ensureAnonymousAuth();
+
       haptic.success();
       setTeam({
         team_id: String(team.team_id),
@@ -69,6 +74,8 @@ export default function TeamSignIn() {
         grade_level: team.grade_level,
 
         discriminator: team.discriminator,
+
+        firebase_uid,
 
         members: team.members.map((member: any) => ({
           first_name: member.first_name,
