@@ -1,4 +1,4 @@
-import { Accelerometer } from "expo-sensors";
+import { Accelerometer, Gyroscope } from "expo-sensors";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -60,6 +60,8 @@ export default function HumanPerformance() {
   const [writeUpText, setWriteUpTextLocal] = useState("");
 
   const magnitudesRef = useRef<number[]>([]);
+  const gyroMagnitudesRef = useRef<number[]>([]);
+  const [avgGyro, setAvgGyro] = useState(0);
   const sessionStartedAtRef = useRef(0);
   const guideAnim = useRef(new Animated.Value(0)).current;
   const guideLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -77,15 +79,28 @@ export default function HumanPerformance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Accelerometer subscription (active only while running) ----
+  // ---- Sensor subscriptions (active only while running) ----
+  // Accelerometer drives the smoothness score; gyroscope is captured
+  // alongside as an extra "rotation" metric so kids can see how much
+  // their hand twists during the motion (not part of the score).
   useEffect(() => {
     if (!isRunning) return;
     Accelerometer.setUpdateInterval(ACCEL_SAMPLE_INTERVAL_MS);
-    const sub = Accelerometer.addListener((data) => {
+    Gyroscope.setUpdateInterval(ACCEL_SAMPLE_INTERVAL_MS);
+
+    const accelSub = Accelerometer.addListener((data) => {
       const mag = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
       magnitudesRef.current.push(mag);
     });
-    return () => sub.remove();
+    const gyroSub = Gyroscope.addListener((data) => {
+      const mag = Math.sqrt(data.x ** 2 + data.y ** 2 + data.z ** 2);
+      gyroMagnitudesRef.current.push(mag);
+    });
+
+    return () => {
+      accelSub.remove();
+      gyroSub.remove();
+    };
   }, [isRunning]);
 
   // ---- Countdown using wall-clock time (drift-free) ----
@@ -142,6 +157,8 @@ export default function HumanPerformance() {
   // ---- Session control ----
   const startSession = () => {
     magnitudesRef.current = [];
+    gyroMagnitudesRef.current = [];
+    setAvgGyro(0);
     setResult(null);
     setSecondsLeft(SESSION_DURATION_MS / 1000);
     setIsRunning(true);
@@ -153,6 +170,16 @@ export default function HumanPerformance() {
     setResult(r);
     if (!r) return;
 
+    // Extra gyroscope metric — captured during the session but not part
+    // of the smoothness score. Just reported alongside for the kids to
+    // see how much their hand rotated while moving.
+    const gyroSamples = gyroMagnitudesRef.current;
+    const gyroAvg =
+      gyroSamples.length > 0
+        ? gyroSamples.reduce((a, b) => a + b, 0) / gyroSamples.length
+        : 0;
+    setAvgGyro(Number(gyroAvg.toFixed(3)));
+
     updateRawData({
       acceleration_magnitudes: magnitudesRef.current,
       average_jerk: r.average_jerk,
@@ -160,6 +187,8 @@ export default function HumanPerformance() {
       smoothness_score: r.smoothness_score,
       performance_level: r.performance_level,
       samples_collected: r.samples_collected,
+      avg_gyro_magnitude: Number(gyroAvg.toFixed(4)),
+      gyro_samples_collected: gyroSamples.length,
       duration_ms: SESSION_DURATION_MS,
       total_cycles: TOTAL_CYCLES,
     });
@@ -538,6 +567,11 @@ export default function HumanPerformance() {
                 <MetricCard
                   label="Range of motion"
                   value={result.range_of_motion.toFixed(3)}
+                />
+                <MetricCard
+                  label="Rotation (gyro)"
+                  value={avgGyro.toFixed(3)}
+                  unit="rad/s"
                 />
                 <MetricCard
                   label="Performance"

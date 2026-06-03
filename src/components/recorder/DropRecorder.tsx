@@ -53,6 +53,7 @@ export default function DropRecorder({
   const [recording, setRecording] = useState<DropRecording | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [uploading, setUploading] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   const cameraRef = useRef<CameraView>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -244,6 +245,7 @@ export default function DropRecorder({
             style={s.camera}
             mode="video"
             facing="back"
+            enableTorch={torchOn}
           />
         )}
 
@@ -254,6 +256,23 @@ export default function DropRecorder({
             />
             <Text style={[s.recText, { color: theme.colors.textOnPrimary }]}>REC</Text>
           </View>
+        ) : null}
+
+        {mode !== 'review' && !uploading ? (
+          <TouchableOpacity
+            style={[
+              s.torchButton,
+              { backgroundColor: torchOn ? theme.colors.accent : 'rgba(0,0,0,0.45)' },
+            ]}
+            onPress={() => setTorchOn((on) => !on)}
+            accessibilityLabel={torchOn ? 'Turn torch off' : 'Turn torch on'}
+          >
+            <Ionicons
+              name={torchOn ? 'flashlight' : 'flashlight-outline'}
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
         ) : null}
 
         {(mode === 'recording' || mode === 'review') ? (
@@ -404,6 +423,17 @@ const s = StyleSheet.create({
   },
   recDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   recText: { fontSize: 12, fontWeight: '700' },
+
+  torchButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   timeOverlay: {
     position: 'absolute',
