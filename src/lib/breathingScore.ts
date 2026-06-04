@@ -15,7 +15,8 @@
 //      prediction-accuracy score (the spec's "were you right?").
 // =====================================================================
 
-export const MEASUREMENT_DURATION_S = 20;
+//export const MEASUREMENT_DURATION_S = 20;
+export const MEASUREMENT_DURATION_S = 5; // Reduced from 20 seconds to 5 seconds for demo purposes
 export const ACCEL_SAMPLE_INTERVAL_MS = 100; // 10 Hz
 export const SMOOTHING_WINDOW = 5;
 export const PEAK_MIN_DISTANCE_SAMPLES = 10; // 1 s at 10 Hz
