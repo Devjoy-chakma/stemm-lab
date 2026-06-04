@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.stemmlab"
+      "bundleIdentifier": "com.devjoy.stemmlab"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,9 +29,11 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "com.anonymous.stemmlab"
+      "package": "com.devjoy.stemmlab"
     },
     "web": {
       "favicon": "./assets/logo.png"
@@ -59,6 +61,12 @@
           "locationWhenInUsePermission": "STEMMLab tags your activity attempts with location so you can see your team's results on a map."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ffc38b46-0afa-4dd2-a0fa-cc0d878d9fa1"
+      }
+    }
   }
 }
