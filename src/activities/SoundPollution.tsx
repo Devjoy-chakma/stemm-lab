@@ -371,7 +371,7 @@ try {
                   onPress={handleStartSample}
                 >
                   <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
-                    Start 10-second sample
+                    Start 5-second sample
                   </Text>
                 </TouchableOpacity>
               ) : null}
