@@ -25,14 +25,17 @@ import { calculateReactionBoardResult } from "../lib/reactionScore";
 import { useAttemptStore, useTeamStore } from "../stores";
 import { useTheme } from "../theme";
 
-const TOTAL_ROUNDS = 3;
+//const TOTAL_ROUNDS = 3;
+const TOTAL_ROUNDS = 2; // Reduced from 3 rounds to 2 round for demo purpose
+
 const INTER_ROUND_DELAY_MS = 1000;
 const MIN_PROMPT_DELAY_MS = 1000;
 const MAX_PROMPT_DELAY_MS = 3000;
 
 const TRACING_AREA_HEIGHT = 220;
 const DOT_SIZE = 64;
-const TRACING_DURATION_MS = 8000;
+//const TRACING_DURATION_MS = 8000;
+const TRACING_DURATION_MS = 4000; // Reduced from 8 seconds to 4 seconds for demo purposes
 const TRACING_SAMPLE_MS = 100;
 const TRACING_OFFSCREEN_PENALTY_PX = 200;
 
