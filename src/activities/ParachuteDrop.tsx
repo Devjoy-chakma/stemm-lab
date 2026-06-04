@@ -1,27 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Alert,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import ActivityShell from '../components/ActivityShell';
-import DropRecorder, { DropRecording } from '../components/recorder/DropRecorder';
 import MetricCard from '../components/MetricCard';
-import { useTheme } from '../theme';
-import { useAttemptStore, useTeamStore } from '../stores';
+import DropRecorder, { DropRecording } from '../components/recorder/DropRecorder';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import { getCurrentLocationOrNull } from '../lib/location';
 import { notifyActivityScored } from '../lib/notifications';
 import {
-  calculateParachuteResult,
   calculateImprovement,
+  calculateParachuteResult,
   DEFAULT_TOY_MASS_KG,
 } from '../lib/parachuteScore';
+import { useAttemptStore, useTeamStore } from '../stores';
+import { useTheme } from '../theme';
 
 export default function ParachuteDrop() {
   const { theme } = useTheme();
@@ -143,7 +143,8 @@ export default function ParachuteDrop() {
   const heightNum = parseFloat(dropHeight) || 0;
   const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
   const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
-  const hasAllAttempts = attempts.length >= 3;
+  // Temporary changed to 1 attempt for demonstration presentation. Change back to 3 attempts for final release.
+  const hasAllAttempts = attempts.length >= 1;
   const durations = attempts.map((a) => a.duration);
 
   const computed = calculateParachuteResult(
@@ -286,7 +287,9 @@ export default function ParachuteDrop() {
           </View>
 
           <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.xl }]}>
-            Attempt {Math.min(attempts.length + 1, 3)} of 3
+            {/*  Demo version: reduced from 3 attempts to 1 attempt */}
+            {/* Attempt {Math.min(attempts.length + 1, 3)} of 3 */}
+            Attempt {Math.min(attempts.length + 1, 1)} of 1
           </Text>
 
           {!hasAllAttempts ? (
