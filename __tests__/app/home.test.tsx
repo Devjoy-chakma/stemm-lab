@@ -7,8 +7,8 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
 }));
 
-import { ThemeProvider } from '../src/theme';
-import Home from './home';
+import { ThemeProvider } from '../../src/theme';
+import Home from '../../app/home';
 
 describe('Home screen', () => {
   it('renders the title and activity tiles', () => {
