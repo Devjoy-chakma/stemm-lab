@@ -5,6 +5,7 @@ import { countPendingSync } from "../src/database/repositories/attemptRepository
 import { runPendingSyncNow } from "../src/lib/backgroundSync";
 import { useBattery } from "../src/lib/battery";
 import { haptic } from "../src/lib/haptics";
+import { useTeamStore } from "../src/stores";
 import { useTheme } from "../src/theme";
 
 export default function Settings() {
@@ -14,8 +15,30 @@ export default function Settings() {
   const batteryPct = Math.round(level * 100);
   const lowBattery = batteryPct < 20 && !charging;
 
+  const team = useTeamStore((s) => s.team);
+  const clearTeam = useTeamStore((s) => s.clearTeam);
+
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
+
+  const handleSignOut = () => {
+    Alert.alert(
+      "Sign out?",
+      "You'll need to enter your team name and PIN to sign back in.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign out",
+          style: "destructive",
+          onPress: () => {
+            haptic.warning();
+            clearTeam();
+            router.replace("/");
+          },
+        },
+      ]
+    );
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -100,7 +123,7 @@ export default function Settings() {
             },
           ]}
         >
-          SCRUM-29 will build this
+          Manage your STEMMLab preferences.
         </Text>
       </View>
 
@@ -125,16 +148,51 @@ export default function Settings() {
           />
         </View>
 
-        {/* Accessibility */}
-        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
-          Accessibility
-        </Text>
+        {/* Team */}
+        {team ? (
+          <>
+            <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
+              Team
+            </Text>
 
-        <View style={[styles.settingRow, rowBorder]}>
-          <Text style={[styles.settingText, textMuted, styles.italicText]}>
-            SCRUM-29 will build this
-          </Text>
-        </View>
+            <View style={[styles.settingRow, rowBorder]}>
+              <View>
+                <Text style={[styles.settingText, textPrimary]}>
+                  {team.team_name}
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.textMuted,
+                    fontSize: 12,
+                    marginTop: 2,
+                    letterSpacing: 1,
+                  }}
+                >
+                  {team.discriminator}
+                </Text>
+              </View>
+              <Text
+                style={{ color: theme.colors.textMuted, fontSize: 13 }}
+              >
+                {team.members.length} member{team.members.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSignOut}
+              style={[styles.settingRow, rowBorder]}
+            >
+              <Text
+                style={[styles.settingText, { color: theme.colors.danger }]}
+              >
+                Sign out
+              </Text>
+              <Text style={{ color: theme.colors.danger, fontSize: 18 }}>
+                →
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
 
         {/* Device */}
         <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
