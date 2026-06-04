@@ -1,37 +1,39 @@
-import { useState, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import {
-  useAudioRecorder,
-  useAudioRecorderState,
   AudioModule,
   RecordingPresets,
   setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
 } from 'expo-audio';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import ActivityShell from '../components/ActivityShell';
 import MetricCard from '../components/MetricCard';
-import { useTheme } from '../theme';
-import { useAttemptStore, useTeamStore } from '../stores';
 import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
 import { getCurrentLocationOrNull } from '../lib/location';
 import { notifyActivityScored } from '../lib/notifications';
+import { calculateImprovement } from '../lib/parachuteScore';
 import {
   calculateSoundPollutionResult,
   dbfsToNoiseLevel,
   SoundSample,
 } from '../lib/soundPollutionScore';
-import { calculateImprovement } from '../lib/parachuteScore';
+import { useAttemptStore, useTeamStore } from '../stores';
+import { useTheme } from '../theme';
 
-const SAMPLE_DURATION_MS = 10_000; // 10 seconds per sample
-const REQUIRED_SAMPLES = 3;
+//const SAMPLE_DURATION_MS = 10_000; // 10 seconds per sample
+const SAMPLE_DURATION_MS = 5_000; // Reduced to 5 seconds for demo purposes
+//const REQUIRED_SAMPLES = 3;
+const REQUIRED_SAMPLES = 1; // Reduced to 1 sample for demo purposes
 const METER_TICK_MS = 100;
 
 export default function SoundPollution() {
@@ -241,9 +243,15 @@ try {
   const previousScore = previous?.score ?? null;
   const improvement = calculateImprovement(score, previousScore);
 
+  // const briefSpeechText =
+  //   'Use the microphone to measure noise levels in different places. ' +
+  //   'Take three 10-second samples in three different locations. ' +
+  //   'Quieter places mean less sound pollution and a higher score.';
+
+  // Reduced to one sample with 5 seconds duration for demo purposes
   const briefSpeechText =
     'Use the microphone to measure noise levels in different places. ' +
-    'Take three 10-second samples in three different locations. ' +
+    'Take one 5-second samples in three different locations. ' +
     'Quieter places mean less sound pollution and a higher score.';
 
   return (
