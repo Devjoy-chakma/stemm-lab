@@ -8,15 +8,15 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (cb: () => void) => cb(),
 }));
 
-jest.mock('../src/lib/battery', () => ({
+jest.mock('../../src/lib/battery', () => ({
   useBattery: () => ({ level: 0.8, charging: false }),
 }));
 
-jest.mock('../src/database/repositories/attemptRepository', () => ({
+jest.mock('../../src/database/repositories/attemptRepository', () => ({
   countPendingSync: jest.fn().mockResolvedValue(0),
 }));
 
-jest.mock('../src/lib/backgroundSync', () => ({
+jest.mock('../../src/lib/backgroundSync', () => ({
   runPendingSyncNow: jest.fn().mockResolvedValue({
     attempted: 0,
     synced: 0,
@@ -24,8 +24,8 @@ jest.mock('../src/lib/backgroundSync', () => ({
   }),
 }));
 
-import { ThemeProvider } from '../src/theme';
-import Settings from './settings';
+import { ThemeProvider } from '../../src/theme';
+import Settings from '../../app/settings';
 
 describe('Settings screen', () => {
   it('renders the title, Appearance/Device/Sync sections, and battery %', async () => {

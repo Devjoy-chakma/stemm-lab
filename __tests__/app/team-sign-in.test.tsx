@@ -1,5 +1,7 @@
 // Renders the Team Sign In screen and asserts the team-name + PIN
 // fields and the primary CTA. (This codebase uses team name + 4-digit
+// PIN, not email/password — the assertions mirror what the screen
+// actually shows.)
 
 import { render } from '@testing-library/react-native';
 
@@ -7,16 +9,16 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn(), dismissAll: jest.fn() }),
 }));
 
-jest.mock('../src/database/repositories/teamRepository', () => ({
+jest.mock('../../src/database/repositories/teamRepository', () => ({
   findTeamByCredentials: jest.fn(),
 }));
 
-jest.mock('../src/lib/auth', () => ({
+jest.mock('../../src/lib/auth', () => ({
   ensureAnonymousAuth: jest.fn().mockResolvedValue(null),
 }));
 
-import { ThemeProvider } from '../src/theme';
-import TeamSignIn from './team-sign-in';
+import { ThemeProvider } from '../../src/theme';
+import TeamSignIn from '../../app/team-sign-in';
 
 describe('Team Sign In screen', () => {
   it('renders the team-name and team-PIN fields plus the Continue button', () => {

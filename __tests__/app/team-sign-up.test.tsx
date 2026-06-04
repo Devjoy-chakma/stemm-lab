@@ -7,16 +7,16 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn(), dismissAll: jest.fn() }),
 }));
 
-jest.mock('../src/database/repositories/teamRepository', () => ({
+jest.mock('../../src/database/repositories/teamRepository', () => ({
   createTeamSession: jest.fn(),
 }));
 
-jest.mock('../src/lib/auth', () => ({
+jest.mock('../../src/lib/auth', () => ({
   ensureAnonymousAuth: jest.fn().mockResolvedValue(null),
 }));
 
-import { ThemeProvider } from '../src/theme';
-import TeamSignUp from './team-sign-up';
+import { ThemeProvider } from '../../src/theme';
+import TeamSignUp from '../../app/team-sign-up';
 
 describe('Team Sign Up screen', () => {
   it('renders the title, fields, and the Create Team CTA', () => {

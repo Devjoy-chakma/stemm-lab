@@ -11,8 +11,8 @@ jest.mock('expo-status-bar', () => ({
   StatusBar: () => null,
 }));
 
-import { ThemeProvider } from '../src/theme';
-import Welcome from './index';
+import { ThemeProvider } from '../../src/theme';
+import Welcome from '../../app/index';
 
 describe('Welcome (app/index.tsx)', () => {
   it('renders the title and both sign-in / sign-up buttons', () => {

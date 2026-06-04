@@ -19,9 +19,9 @@ jest.mock('firebase/firestore', () => ({
   }),
 }));
 
-jest.mock('../src/lib/firebase', () => ({ db: { __fake: true } }));
+jest.mock('../../src/lib/firebase', () => ({ db: { __fake: true } }));
 
-jest.mock('../src/lib/location', () => ({
+jest.mock('../../src/lib/location', () => ({
   getCurrentLocationOrNull: jest.fn().mockResolvedValue(null),
 }));
 
@@ -38,8 +38,8 @@ jest.mock('react-native-maps', () => {
   };
 });
 
-import { ThemeProvider } from '../src/theme';
-import MapScreen from './map';
+import { ThemeProvider } from '../../src/theme';
+import MapScreen from '../../app/map';
 
 describe('Map screen', () => {
   it('renders the Map view header and the empty state once the snapshot resolves', async () => {
