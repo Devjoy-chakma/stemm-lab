@@ -6,15 +6,20 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  ActivityIndicator,
 } from 'react-native';
 import {
   CameraView,
   useCameraPermissions,
 } from 'expo-camera';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import * as FileSystem from 'expo-file-system';
+// `expo-file-system/legacy` keeps deleteAsync working in SDK 54 (the
+// non-legacy import deprecates it at runtime and throws on use).
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
+import { haptic } from '../../lib/haptics';
+import { makeParachuteVideoPath, uploadVideo } from '../../lib/mediaUpload';
 
 export interface DropRecording {
   uri: string;
@@ -47,6 +52,8 @@ export default function DropRecorder({
   const [elapsed, setElapsed] = useState(0);
   const [recording, setRecording] = useState<DropRecording | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+  const [uploading, setUploading] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   const cameraRef = useRef<CameraView>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,6 +127,7 @@ export default function DropRecorder({
   const startRecording = async () => {
     if (!cameraRef.current || mode !== 'idle') return;
 
+    haptic.medium();
     setRecording(null);
     setElapsed(0);
     setMode('recording');
@@ -150,25 +158,50 @@ export default function DropRecorder({
 
   const stopRecording = () => {
     if (cameraRef.current && mode === 'recording') {
+      haptic.medium();
       cameraRef.current.stopRecording();
     }
   };
 
   const handleConfirm = async () => {
     if (!recording) return;
-    onConfirm(recording);
+
+    setUploading(true);
+    // Upload to Firebase Storage first; fall back to empty URL on
+    // failure so the attempt isn't blocked (the score only needs
+    // duration_seconds, which we already have).
+    let cloudUrl = '';
+    try {
+      cloudUrl = await uploadVideo(
+        recording.uri,
+        makeParachuteVideoPath(recording.uri)
+      );
+      haptic.success();
+    } catch (e) {
+      console.warn('Video upload failed, continuing without URL:', e);
+      haptic.warning();
+    }
+
+    onConfirm({
+      uri: cloudUrl,
+      duration_seconds: recording.duration_seconds,
+    });
+
     try {
       await FileSystem.deleteAsync(recording.uri, { idempotent: true });
     } catch (e) {
       console.warn('Failed to delete video:', e);
     }
+
     setRecording(null);
     setElapsed(0);
     setMode('idle');
     setPlaybackRate(1.0);
+    setUploading(false);
   };
 
   const handleDiscard = async () => {
+    haptic.light();
     if (recording) {
       try {
         await FileSystem.deleteAsync(recording.uri, { idempotent: true });
@@ -212,6 +245,7 @@ export default function DropRecorder({
             style={s.camera}
             mode="video"
             facing="back"
+            enableTorch={torchOn}
           />
         )}
 
@@ -224,6 +258,23 @@ export default function DropRecorder({
           </View>
         ) : null}
 
+        {mode !== 'review' && !uploading ? (
+          <TouchableOpacity
+            style={[
+              s.torchButton,
+              { backgroundColor: torchOn ? theme.colors.accent : 'rgba(0,0,0,0.45)' },
+            ]}
+            onPress={() => setTorchOn((on) => !on)}
+            accessibilityLabel={torchOn ? 'Turn torch off' : 'Turn torch on'}
+          >
+            <Ionicons
+              name={torchOn ? 'flashlight' : 'flashlight-outline'}
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        ) : null}
+
         {(mode === 'recording' || mode === 'review') ? (
           <View style={s.timeOverlay}>
             <Text style={[s.timeText, { color: theme.colors.textOnPrimary }]}>
@@ -232,7 +283,7 @@ export default function DropRecorder({
           </View>
         ) : null}
 
-        {mode === 'review' ? (
+        {mode === 'review' && !uploading ? (
           <TouchableOpacity style={s.playOverlay} onPress={togglePlayback}>
             <Ionicons
               name={player?.playing ? 'pause' : 'play'}
@@ -241,6 +292,13 @@ export default function DropRecorder({
               style={{ opacity: 0.9 }}
             />
           </TouchableOpacity>
+        ) : null}
+
+        {uploading ? (
+          <View style={s.uploadingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={s.uploadingText}>Uploading video…</Text>
+          </View>
         ) : null}
       </View>
 
@@ -284,11 +342,11 @@ export default function DropRecorder({
             {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
-              opacity: mode === 'review' ? 1 : 0.4,
+              opacity: mode === 'review' && !uploading ? 1 : 0.4,
             },
           ]}
           onPress={handleDiscard}
-          disabled={mode !== 'review'}
+          disabled={mode !== 'review' || uploading}
         >
           <Ionicons name="refresh" size={20} color={theme.colors.text} />
         </TouchableOpacity>
@@ -306,11 +364,11 @@ export default function DropRecorder({
               s.recordButton,
               {
                 backgroundColor: theme.colors.danger,
-                opacity: !isReady || mode === 'review' ? 0.4 : 1,
+                opacity: !isReady || mode === 'review' || uploading ? 0.4 : 1,
               },
             ]}
             onPress={startRecording}
-            disabled={!isReady || mode === 'review'}
+            disabled={!isReady || mode === 'review' || uploading}
           >
             <View style={s.recordCircle} />
           </TouchableOpacity>
@@ -322,11 +380,11 @@ export default function DropRecorder({
             {
               backgroundColor: theme.colors.success,
               borderColor: theme.colors.success,
-              opacity: mode === 'review' ? 1 : 0.4,
+              opacity: mode === 'review' && !uploading ? 1 : 0.4,
             },
           ]}
           onPress={handleConfirm}
-          disabled={mode !== 'review'}
+          disabled={mode !== 'review' || uploading}
         >
           <Ionicons name="checkmark" size={20} color={theme.colors.textOnPrimary} />
         </TouchableOpacity>
@@ -366,6 +424,17 @@ const s = StyleSheet.create({
   recDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   recText: { fontSize: 12, fontWeight: '700' },
 
+  torchButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   timeOverlay: {
     position: 'absolute',
     bottom: 12,
@@ -382,6 +451,21 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  uploadingText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 12,
+    letterSpacing: 0.5,
   },
 
   rateRow: {

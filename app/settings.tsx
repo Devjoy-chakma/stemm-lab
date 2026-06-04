@@ -1,10 +1,57 @@
-import { useRouter } from "expo-router";
-import { StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { countPendingSync } from "../src/database/repositories/attemptRepository";
+import { runPendingSyncNow } from "../src/lib/backgroundSync";
+import { useBattery } from "../src/lib/battery";
+import { haptic } from "../src/lib/haptics";
 import { useTheme } from "../src/theme";
 
 export default function Settings() {
   const router = useRouter();
   const { theme, toggleTheme, isDark } = useTheme();
+  const { level, charging } = useBattery();
+  const batteryPct = Math.round(level * 100);
+  const lowBattery = batteryPct < 20 && !charging;
+
+  const [pending, setPending] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      countPendingSync().then(setPending);
+    }, [])
+  );
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      const result = await runPendingSyncNow();
+      const after = await countPendingSync();
+      setPending(after);
+      if (result.synced > 0) {
+        haptic.success();
+        Alert.alert(
+          "Sync complete",
+          `Sent ${result.synced} of ${result.attempted} pending score${
+            result.attempted === 1 ? "" : "s"
+          }.`
+        );
+      } else if (result.attempted === 0) {
+        Alert.alert("Nothing to sync", "No pending leaderboard entries.");
+      } else {
+        haptic.warning();
+        Alert.alert(
+          "Sync failed",
+          `${result.remaining} score${
+            result.remaining === 1 ? "" : "s"
+          } still pending. Check your connection and try again.`
+        );
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Theme helpers
   const textPrimary = { color: theme.colors.primary };
@@ -69,10 +116,12 @@ export default function Settings() {
             value={isDark}
             onValueChange={toggleTheme}
             trackColor={{
-              false: "#D1D5DB",
+              false: theme.colors.border,
               true: theme.colors.primarySoft,
             }}
-            thumbColor={isDark ? theme.colors.primary : "#FFFFFF"}
+            thumbColor={
+              isDark ? theme.colors.primary : theme.colors.surface
+            }
           />
         </View>
 
@@ -86,6 +135,65 @@ export default function Settings() {
             SCRUM-29 will build this
           </Text>
         </View>
+
+        {/* Device */}
+        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
+          Device
+        </Text>
+
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textPrimary]}>Battery</Text>
+          <Text
+            style={[
+              styles.settingText,
+              {
+                color: lowBattery ? theme.colors.danger : theme.colors.primary,
+                fontVariant: ["tabular-nums"],
+              },
+            ]}
+          >
+            {batteryPct}%{charging ? "  ⚡" : ""}
+          </Text>
+        </View>
+
+        {/* Sync */}
+        <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>
+          Sync
+        </Text>
+
+        <View style={[styles.settingRow, rowBorder]}>
+          <Text style={[styles.settingText, textPrimary]}>
+            Pending leaderboard sends
+          </Text>
+          <Text
+            style={[
+              styles.settingText,
+              {
+                color: pending > 0 ? theme.colors.warning : theme.colors.primary,
+                fontVariant: ["tabular-nums"],
+              },
+            ]}
+          >
+            {pending}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleSyncNow}
+          disabled={syncing}
+          style={[
+            styles.settingRow,
+            rowBorder,
+            { opacity: syncing ? 0.6 : 1 },
+          ]}
+        >
+          <Text style={[styles.settingText, { color: theme.colors.primarySoft }]}>
+            {syncing ? "Syncing…" : "Sync now"}
+          </Text>
+          <Text style={{ color: theme.colors.primarySoft, fontSize: 18 }}>
+            ↻
+          </Text>
+        </TouchableOpacity>
 
         {/* About */}
         <Text style={[styles.sectionTitle, textMuted, styles.sectionSpacing]}>

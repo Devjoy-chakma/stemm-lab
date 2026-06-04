@@ -1,20 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Alert,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import ActivityShell from '../components/ActivityShell';
-import MetricCard from '../components/MetricCard';
-import { useTheme } from '../theme';
-import { useAttemptStore, useTeamStore } from '../stores';
-import { sendToLeaderboard } from '../lib/leaderboardSync';
-import { calculateHandFanResult } from '../lib/handFanScore';
-import { calculateImprovement } from '../lib/parachuteScore';
+  View,
+} from "react-native";
+
+import ActivityShell from "../components/ActivityShell";
+import MetricCard from "../components/MetricCard";
+
+import {
+  calculateHandFanResult,
+  DISTANCES_CM,
+  HandFanMaterialId,
+  MATERIALS,
+} from "../lib/handFanScore";
+import { haptic } from "../lib/haptics";
+import { sendToLeaderboard } from "../lib/leaderboardSync";
+import { getCurrentLocationOrNull } from "../lib/location";
+import { notifyActivityScored } from "../lib/notifications";
+import { calculateImprovement } from "../lib/parachuteScore";
+import { useAttemptStore, useTeamStore } from "../stores";
+import { useTheme } from "../theme";
 
 export default function HandFan() {
   const { theme } = useTheme();
@@ -22,81 +32,115 @@ export default function HandFan() {
   const team = useTeamStore((s) => s.team);
   const current = useAttemptStore((s) => s.current);
   const startAttempt = useAttemptStore((s) => s.startAttempt);
-  const updateRawData = useAttemptStore((s) => s.updateRawData);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
-  const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
+  const updateRawData = useAttemptStore((s) => s.updateRawData);
+  const getPreviousAttemptForActivity = useAttemptStore(
+    (s) => s.getPreviousAttemptForActivity
+  );
 
   // ---- Run state ----
-  const [fanCount, setFanCount] = useState(0);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [elapsed, setElapsed] = useState(0);
-  const [completed, setCompleted] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [materialId, setMaterialId] = useState<HandFanMaterialId>("paper");
+  const [distanceCm, setDistanceCm] = useState<number>(30);
+  const [prediction, setPrediction] = useState<string>("");
+  const [outcome, setOutcome] = useState<string>("");
 
-  // ---- Write-up + submit state ----
-  const [writeUpText, setWriteUpTextLocal] = useState('');
+  // ---- Submit / write-up state ----
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentToLeaderboard, setSentToLeaderboard] = useState(false);
+  const [writeUpText, setWriteUpTextLocal] = useState("");
 
   useEffect(() => {
-    const teamId = team?.team_id ?? 'demo-team';
-    startAttempt(teamId, 'hand-fan');
+    const teamId = team?.team_id ?? "demo-team";
+    startAttempt(teamId, "hand-fan");
+    getCurrentLocationOrNull().then((loc) => {
+      if (loc) setLocation(loc.lat, loc.lng);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Timer effect ----
-  useEffect(() => {
-    if (startedAt !== null && !completed) {
-      intervalRef.current = setInterval(() => {
-        setElapsed((Date.now() - startedAt) / 1000);
-      }, 100);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [startedAt, completed]);
-
-  // ---- Run actions ----
-  const handleStart = () => {
-    setFanCount(0);
-    setElapsed(0);
-    setCompleted(false);
-    setStartedAt(Date.now());
-  };
-
-  const handleFanTap = () => {
-    if (startedAt !== null && !completed) {
-      setFanCount((c) => c + 1);
-    }
-  };
-
-  const handleStop = () => {
-    if (startedAt === null) return;
-    const final = (Date.now() - startedAt) / 1000;
-    setElapsed(final);
-    setCompleted(true);
-    setStartedAt(null);
-  };
-
-  const handleReset = () => {
-    setFanCount(0);
-    setElapsed(0);
-    setCompleted(false);
-    setStartedAt(null);
-  };
-
   // ---- Submit ----
   const handleSubmit = () => {
-    const result = calculateHandFanResult(fanCount, elapsed);
-    if (!result) return;
+    const predNum = parseFloat(prediction);
+    const outNum = parseFloat(outcome);
+    if (Number.isNaN(predNum) || Number.isNaN(outNum)) {
+      Alert.alert(
+        "Missing angle",
+        "Enter both the predicted and observed bend angles in degrees."
+      );
+      return;
+    }
+    const result = calculateHandFanResult(
+      materialId,
+      distanceCm,
+      predNum,
+      outNum
+    );
+    if (!result) {
+      Alert.alert(
+        "Invalid input",
+        "Bend angles must be between 0° and 180°."
+      );
+      return;
+    }
 
-    updateRawData(result);
-    setScore(result.efficiency_score);
+    updateRawData({
+      materialId: result.material.id,
+      materialLabel: result.material.label,
+      distance_cm: result.distance_cm,
+      prediction_degrees: result.prediction_degrees,
+      outcome_degrees: result.outcome_degrees,
+      prediction_error_degrees: result.prediction_error_degrees,
+      prediction_accuracy: result.prediction_accuracy,
+      airflow_score: result.airflow_score,
+    });
+    setScore(result.airflow_score);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? "Your team",
+      "Hand Fan",
+      result.airflow_score
+    );
+  };
+
+  const handleTryAgain = () => {
+    setPrediction("");
+    setOutcome("");
+    setSubmitted(false);
+    setSending(false);
+    setSentToLeaderboard(false);
+    setWriteUpTextLocal("");
+    setWriteUp("");
+    const teamId = team?.team_id ?? "demo-team";
+    startAttempt(teamId, "hand-fan");
+  };
+
+  const handleSendToLeaderboard = async () => {
+    if (!team) {
+      Alert.alert("No team set", "Set up a team first.");
+      return;
+    }
+    if (!current) {
+      Alert.alert("No attempt", "Submit your run first.");
+      return;
+    }
+    setSending(true);
+    try {
+      await sendToLeaderboard(current, team);
+      setSentToLeaderboard(true);
+      haptic.success();
+      Alert.alert("Sent!", "Your score is on the leaderboard.");
+    } catch (e: any) {
+      haptic.error();
+      Alert.alert("Send failed", e.message ?? "Unknown error");
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleWriteUpChange = (text: string) => {
@@ -104,51 +148,23 @@ export default function HandFan() {
     setWriteUp(text);
   };
 
-  const handleTryAgain = () => {
-    handleReset();
-    setSubmitted(false);
-    setSentToLeaderboard(false);
-    const teamId = team?.team_id ?? 'demo-team';
-    startAttempt(teamId, 'hand-fan');
-  };
+  // ---- Computed ----
+  const predNum = parseFloat(prediction);
+  const outNum = parseFloat(outcome);
+  const result =
+    !Number.isNaN(predNum) && !Number.isNaN(outNum)
+      ? calculateHandFanResult(materialId, distanceCm, predNum, outNum)
+      : null;
+  const airflowScore = result?.airflow_score ?? 0;
 
-  const handleSendToLeaderboard = async () => {
-    if (!team) {
-      Alert.alert('No team set', 'Set up a team first.');
-      return;
-    }
-    if (!current) {
-      Alert.alert('No attempt', 'Submit your run first.');
-      return;
-    }
-    setSending(true);
-    try {
-      await sendToLeaderboard(current, team);
-      setSentToLeaderboard(true);
-      Alert.alert('Sent!', 'Your score is on the leaderboard.');
-    } catch (e: any) {
-      Alert.alert('Send failed', e.message ?? 'Unknown error');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // ---- Computed values ----
-  const result = calculateHandFanResult(fanCount, elapsed);
-  const score = result?.efficiency_score ?? 0;
-  const fansPerSecond = result?.fans_per_second ?? 0;
-  const isRunning = startedAt !== null && !completed;
-  const canSubmit = completed && fanCount > 0;
-
-  // Comparison
-  const previous = getPreviousAttemptForActivity('hand-fan');
+  const previous = getPreviousAttemptForActivity("hand-fan");
   const previousScore = previous?.score ?? null;
-  const improvement = calculateImprovement(score, previousScore);
+  const improvement = calculateImprovement(airflowScore, previousScore);
 
   const briefSpeechText =
-    'Build a hand fan from paper. ' +
-    'Use it to fan a balloon across a measured distance. ' +
-    'Count how many fan motions it takes. Fewer, slower fans = better design.';
+    "Stand a sheet of paper or cardboard upright on a table. " +
+    "Predict how much it will bend, then fan it from the chosen distance and measure the actual bend. " +
+    "Compare your prediction with what really happened.";
 
   return (
     <ActivityShell
@@ -168,150 +184,208 @@ export default function HandFan() {
             What you need
           </Text>
           <Text style={[s.p, { color: theme.colors.text, fontSize: theme.fontSize.md, marginTop: theme.spacing.sm }]}>
-            • Paper or thin cardboard{'\n'}
-            • Tape or glue{'\n'}
-            • A balloon (or paper ball){'\n'}
-            • A clear floor space, ~2 metres
+            • Paper and cardboard{"\n"}
+            • Scissors and tape (to build your fan){"\n"}
+            • A flat table{"\n"}
+            • A protractor (or angle app) to measure the bend
+          </Text>
+
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            How it works
+          </Text>
+          <Text style={[s.p, { color: theme.colors.text, fontSize: theme.fontSize.md, marginTop: theme.spacing.sm }]}>
+            Moving air applies force to objects. Stiffer materials bend less for the same amount of airflow. Try different fan designs and distances to see what makes the paper move the most.
           </Text>
         </View>
       }
       run={
         <View>
-          {/* Live counters */}
-          <View style={[s.statsRow, { marginBottom: theme.spacing.md }]}>
-            <View style={s.statBox}>
-              <Text style={[s.statLabel, { color: theme.colors.textMuted, fontSize: theme.fontSize.xs }]}>
-                FANS
-              </Text>
-              <Text style={[s.statValue, { color: theme.colors.primary, fontSize: 56 }]}>
-                {fanCount}
-              </Text>
-            </View>
-            <View style={s.statBox}>
-              <Text style={[s.statLabel, { color: theme.colors.textMuted, fontSize: theme.fontSize.xs }]}>
-                TIME
-              </Text>
-              <Text style={[s.statValue, { color: theme.colors.primary, fontSize: 56 }]}>
-                {elapsed.toFixed(1)}
-                <Text style={{ fontSize: theme.fontSize.lg }}>s</Text>
-              </Text>
-            </View>
+          {/* Material picker */}
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl }]}>
+            Material
+          </Text>
+          <View style={[s.pillRow, { marginTop: theme.spacing.sm }]}>
+            {MATERIALS.map((m) => {
+              const active = m.id === materialId;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  onPress={() => setMaterialId(m.id)}
+                  style={[
+                    s.pillEqual,
+                    {
+                      backgroundColor: active
+                        ? theme.colors.primary
+                        : theme.colors.surface,
+                      borderColor: theme.colors.borderStrong,
+                      borderRadius: theme.radius.md,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.pillText,
+                      {
+                        color: active
+                          ? theme.colors.textOnPrimary
+                          : theme.colors.text,
+                      },
+                    ]}
+                  >
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {/* Big tap area */}
-          {isRunning ? (
-            <TouchableOpacity
-              activeOpacity={0.6}
+          {/* Distance picker */}
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Fan distance
+          </Text>
+          <View style={[s.pillRow, { marginTop: theme.spacing.sm }]}>
+            {DISTANCES_CM.map((d) => {
+              const active = d === distanceCm;
+              return (
+                <TouchableOpacity
+                  key={d}
+                  onPress={() => setDistanceCm(d)}
+                  style={[
+                    s.pillEqual,
+                    {
+                      backgroundColor: active
+                        ? theme.colors.primary
+                        : theme.colors.surface,
+                      borderColor: theme.colors.borderStrong,
+                      borderRadius: theme.radius.md,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.pillText,
+                      {
+                        color: active
+                          ? theme.colors.textOnPrimary
+                          : theme.colors.text,
+                      },
+                    ]}
+                  >
+                    {d} cm
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Prediction input */}
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Prediction
+          </Text>
+          <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.xs }]}>
+            Before fanning, predict how far the paper will bend.
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
               style={[
-                s.tapArea,
+                s.input,
                 {
-                  backgroundColor: theme.colors.primary,
-                  borderRadius: theme.radius.xl,
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
                 },
               ]}
-              onPress={handleFanTap}
-            >
-              <Text style={[s.tapText, { color: theme.colors.textOnPrimary, fontSize: theme.fontSize.hero }]}>
-                FAN!
-              </Text>
-              <Text style={[s.tapSubtext, { color: theme.colors.textOnPrimary, fontSize: theme.fontSize.sm }]}>
-                Tap each fan motion
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+              value={prediction}
+              onChangeText={setPrediction}
+              keyboardType="decimal-pad"
+              placeholder="30"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              degrees
+            </Text>
+          </View>
 
-          {/* Start / Stop / Reset controls */}
-          {!isRunning && !completed ? (
+          {/* Outcome input */}
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Outcome
+          </Text>
+          <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.xs }]}>
+            Now fan the paper and measure how far it actually bent.
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
+              style={[
+                s.input,
+                {
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
+                },
+              ]}
+              value={outcome}
+              onChangeText={setOutcome}
+              keyboardType="decimal-pad"
+              placeholder="35"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              degrees
+            </Text>
+          </View>
+
+          {/* Submit */}
+          {!submitted ? (
             <TouchableOpacity
               style={[
                 s.button,
                 {
-                  backgroundColor: theme.colors.primary,
+                  backgroundColor: theme.colors.success,
                   borderRadius: theme.radius.lg,
                   paddingVertical: theme.spacing.md,
-                  marginTop: theme.spacing.md,
+                  marginTop: theme.spacing.xl,
+                  opacity: result ? 1 : 0.6,
                 },
               ]}
-              onPress={handleStart}
+              onPress={handleSubmit}
+              disabled={!result}
             >
               <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
-                Start fanning
+                Submit & see results
               </Text>
             </TouchableOpacity>
-          ) : null}
-
-          {isRunning ? (
-            <TouchableOpacity
-              style={[
-                s.button,
-                {
-                  backgroundColor: theme.colors.danger,
-                  borderRadius: theme.radius.lg,
-                  paddingVertical: theme.spacing.md,
-                  marginTop: theme.spacing.md,
-                },
-              ]}
-              onPress={handleStop}
-            >
-              <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
-                Reached the line — stop
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {completed && !submitted ? (
-            <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
-              <Text style={[s.p, { color: theme.colors.success, fontSize: theme.fontSize.md, textAlign: 'center' }]}>
-                {fanCount} fans in {elapsed.toFixed(1)}s
-              </Text>
-              <TouchableOpacity
-                style={[
-                  s.button,
-                  {
-                    backgroundColor: theme.colors.success,
-                    borderRadius: theme.radius.lg,
-                    paddingVertical: theme.spacing.md,
-                  },
-                ]}
-                onPress={handleSubmit}
-                disabled={!canSubmit}
-              >
-                <Text style={[s.buttonText, { color: theme.colors.textOnPrimary }]}>
-                  Submit & see results
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleReset} style={{ paddingVertical: theme.spacing.sm }}>
-                <Text style={[s.p, { color: theme.colors.primarySoft, fontSize: theme.fontSize.sm, textAlign: 'center', textDecorationLine: 'underline' }]}>
-                  Reset and try again
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {submitted ? (
-            <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.lg, textAlign: 'center' }]}>
+          ) : (
+            <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.lg, textAlign: "center" }]}>
               Submitted. Tap the Results tab to see your score.
             </Text>
-          ) : null}
+          )}
         </View>
       }
       results={
         <View>
-          {!submitted ? (
+          {!submitted || !result ? (
             <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.md }]}>
-              Complete a run on the Run tab and tap Submit first.
+              Pick a material, fan distance, and enter both bend angles on the Run tab.
             </Text>
           ) : (
             <View>
-              <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xxl, textAlign: 'center', marginTop: theme.spacing.lg }]}>
+              <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xxl, textAlign: "center", marginTop: theme.spacing.lg }]}>
                 Nice work!
               </Text>
-              <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, textAlign: 'center', marginTop: theme.spacing.xs }]}>
-                Efficiency score · {team?.team_name ?? 'Your team'}
+              <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, textAlign: "center", marginTop: theme.spacing.xs }]}>
+                Airflow score · {team?.team_name ?? "Your team"}
               </Text>
 
               <Text style={[s.bigScore, { color: theme.colors.success, marginTop: theme.spacing.md }]}>
-                {score}
+                {airflowScore}
               </Text>
 
               {improvement !== null ? (
@@ -319,25 +393,47 @@ export default function HandFan() {
                   style={[
                     s.badge,
                     {
-                      backgroundColor: improvement >= 0 ? theme.colors.success : theme.colors.warning,
+                      backgroundColor:
+                        improvement >= 0
+                          ? theme.colors.success
+                          : theme.colors.warning,
                       borderRadius: theme.radius.md,
                       paddingHorizontal: theme.spacing.md,
                       paddingVertical: theme.spacing.sm,
-                      alignSelf: 'center',
+                      alignSelf: "center",
                       marginTop: theme.spacing.md,
                     },
                   ]}
                 >
                   <Text style={[s.badgeText, { color: theme.colors.textOnPrimary, fontSize: theme.fontSize.sm }]}>
-                    {improvement >= 0 ? '↑' : '↓'} {Math.abs(improvement)}% {improvement >= 0 ? 'better than' : 'compared to'} last attempt
+                    {improvement >= 0 ? "↑" : "↓"} {Math.abs(improvement)}%{" "}
+                    {improvement >= 0 ? "better than" : "compared to"} last attempt
                   </Text>
                 </View>
               ) : null}
 
               <View style={[s.cards, { marginTop: theme.spacing.lg, gap: theme.spacing.sm }]}>
-                <MetricCard label="Total fans" value={String(fanCount)} />
-                <MetricCard label="Duration" value={elapsed.toFixed(2)} unit="s" />
-                <MetricCard label="Fans per second" value={fansPerSecond.toFixed(2)} unit="/s" />
+                <MetricCard
+                  label="Predicted"
+                  value={result.prediction_degrees.toFixed(0)}
+                  unit="°"
+                />
+                <MetricCard
+                  label="Actual bend"
+                  value={result.outcome_degrees.toFixed(0)}
+                  unit="°"
+                />
+                <MetricCard
+                  label="Prediction accuracy"
+                  value={String(result.prediction_accuracy)}
+                  unit="/100"
+                />
+                <MetricCard label="Material" value={result.material.label} />
+                <MetricCard
+                  label="Fan distance"
+                  value={String(result.distance_cm)}
+                  unit="cm"
+                />
               </View>
 
               {!sentToLeaderboard ? (
@@ -364,13 +460,13 @@ export default function HandFan() {
                   )}
                 </TouchableOpacity>
               ) : (
-                <Text style={[s.p, { color: theme.colors.success, textAlign: 'center', marginTop: theme.spacing.lg, fontSize: theme.fontSize.md }]}>
+                <Text style={[s.p, { color: theme.colors.success, textAlign: "center", marginTop: theme.spacing.lg, fontSize: theme.fontSize.md }]}>
                   ✓ Sent to leaderboard
                 </Text>
               )}
 
               <TouchableOpacity onPress={handleTryAgain} style={{ marginTop: theme.spacing.md }}>
-                <Text style={[s.p, { color: theme.colors.primarySoft, fontSize: theme.fontSize.sm, textAlign: 'center', textDecorationLine: 'underline' }]}>
+                <Text style={[s.p, { color: theme.colors.primarySoft, fontSize: theme.fontSize.sm, textAlign: "center", textDecorationLine: "underline" }]}>
                   Try again
                 </Text>
               </TouchableOpacity>
@@ -384,7 +480,7 @@ export default function HandFan() {
             Reflection
           </Text>
           <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.xs }]}>
-            What worked? What would you change about your fan design?
+            How does material stiffness affect the bend angle? How does fan design influence air velocity and paper movement? How does distance from the fan affect bending?
           </Text>
 
           <TextInput
@@ -415,25 +511,25 @@ export default function HandFan() {
 }
 
 const s = StyleSheet.create({
-  h: { fontWeight: '700' },
+  h: { fontWeight: "700" },
   p: { lineHeight: 22 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  statBox: { alignItems: 'center', flex: 1 },
-  statLabel: { fontWeight: '600', letterSpacing: 1 },
-  statValue: { fontWeight: '700', fontVariant: ['tabular-nums'] },
-  tapArea: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
+  row: { flexDirection: "row", alignItems: "center" },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pillEqual: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
   },
-  tapText: { fontWeight: '700', letterSpacing: 2 },
-  tapSubtext: { marginTop: 6, opacity: 0.85 },
-  button: { alignItems: 'center' },
-  buttonText: { fontSize: 16, fontWeight: '600' },
-  bigScore: { fontSize: 96, fontWeight: '700', textAlign: 'center' },
+  pillText: { fontSize: 14, fontWeight: "600" },
+  input: { borderWidth: 1, textAlign: "center" },
+  unit: { fontWeight: "500" },
+  button: { alignItems: "center" },
+  buttonText: { fontSize: 16, fontWeight: "600" },
+  bigScore: { fontSize: 96, fontWeight: "700", textAlign: "center" },
   badge: {},
-  badgeText: { fontWeight: '700' },
-  cards: { flexDirection: 'column' },
-  cta: { alignItems: 'center' },
+  badgeText: { fontWeight: "700" },
+  cards: { flexDirection: "column" },
+  cta: { alignItems: "center" },
   textarea: { borderWidth: 1, minHeight: 140 },
 });

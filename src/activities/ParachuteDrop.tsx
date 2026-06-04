@@ -13,8 +13,15 @@ import DropRecorder, { DropRecording } from '../components/recorder/DropRecorder
 import MetricCard from '../components/MetricCard';
 import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
+import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
-import { calculateParachuteResult, calculateImprovement } from '../lib/parachuteScore';
+import { getCurrentLocationOrNull } from '../lib/location';
+import { notifyActivityScored } from '../lib/notifications';
+import {
+  calculateParachuteResult,
+  calculateImprovement,
+  DEFAULT_TOY_MASS_KG,
+} from '../lib/parachuteScore';
 
 export default function ParachuteDrop() {
   const { theme } = useTheme();
@@ -25,11 +32,19 @@ export default function ParachuteDrop() {
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
 
   const [dropHeight, setDropHeight] = useState<string>('2');
-  const [attempts, setAttempts] = useState<number[]>([]);
+  const [toyMass, setToyMass] = useState<string>(String(DEFAULT_TOY_MASS_KG));
+  const [contactTime, setContactTime] = useState<string>('');
+  // Each attempt carries the duration (used for scoring) and the
+  // cloud video URL returned by the uploader. video_url is '' if the
+  // upload failed — the score still works because it only needs duration.
+  const [attempts, setAttempts] = useState<
+    { duration: number; video_url: string }[]
+  >([]);
   const [writeUpText, setWriteUpTextLocal] = useState<string>('');
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
@@ -38,12 +53,18 @@ export default function ParachuteDrop() {
   useEffect(() => {
     const teamId = team?.team_id ?? 'demo-team';
     startAttempt(teamId, 'parachute');
+    getCurrentLocationOrNull().then((loc) => {
+      if (loc) setLocation(loc.lat, loc.lng);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- Recording handlers ----
   const handleRecordingConfirmed = (recording: DropRecording) => {
-    setAttempts((prev) => [...prev, recording.duration_seconds]);
+    setAttempts((prev) => [
+      ...prev,
+      { duration: recording.duration_seconds, video_url: recording.uri },
+    ]);
   };
 
   const handleRecordingDiscarded = () => {};
@@ -51,13 +72,35 @@ export default function ParachuteDrop() {
   // ---- Submit ----
   const handleSubmit = () => {
     const heightNum = parseFloat(dropHeight) || 0;
-    const result = calculateParachuteResult(heightNum, attempts);
+    const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
+    const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
+    const durations = attempts.map((a) => a.duration);
+    const videoUrls = attempts.map((a) => a.video_url).filter(Boolean);
+    const result = calculateParachuteResult(
+      heightNum,
+      durations,
+      massNum,
+      contactNum
+    );
     if (!result) return;
 
-    updateRawData({ heightNum, attempts, ...result });
+    updateRawData({
+      heightNum,
+      massKg: massNum,
+      contactTimeSeconds: contactNum,
+      attempts: durations,
+      video_urls: videoUrls,
+      ...result,
+    });
     setScore(result.dragScore);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? 'Your team',
+      'Parachute Drop',
+      result.dragScore
+    );
   };
 
   const handleWriteUpChange = (text: string) => {
@@ -86,8 +129,10 @@ export default function ParachuteDrop() {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert('Sent!', 'Your score is on the leaderboard.');
     } catch (e: any) {
+      haptic.error();
       Alert.alert('Send failed', e.message ?? 'Unknown error');
     } finally {
       setSending(false);
@@ -96,12 +141,20 @@ export default function ParachuteDrop() {
 
   // ---- Computed values ----
   const heightNum = parseFloat(dropHeight) || 0;
+  const massNum = parseFloat(toyMass) || DEFAULT_TOY_MASS_KG;
+  const contactNum = contactTime.trim() ? parseFloat(contactTime) : null;
   const hasAllAttempts = attempts.length >= 3;
+  const durations = attempts.map((a) => a.duration);
 
-  const computed = calculateParachuteResult(heightNum, attempts);
+  const computed = calculateParachuteResult(
+    heightNum,
+    durations,
+    massNum,
+    contactNum
+  );
   const avgTime = computed?.avgTime ?? 0;
   const velocity = computed?.velocity ?? 0;
-  const gForce = computed?.gForce ?? 0;
+  const impactGForce = computed?.impactGForce ?? null;
   const dragForce = computed?.dragForce ?? 0;
   const dragScore = computed?.dragScore ?? 0;
 
@@ -173,6 +226,65 @@ export default function ParachuteDrop() {
             </Text>
           </View>
 
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Toy mass
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
+              style={[
+                s.input,
+                {
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
+                },
+              ]}
+              value={toyMass}
+              onChangeText={setToyMass}
+              keyboardType="decimal-pad"
+              placeholder="0.20"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              kg
+            </Text>
+          </View>
+
+          <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.lg }]}>
+            Contact time (optional)
+          </Text>
+          <Text style={[s.p, { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginTop: theme.spacing.xs }]}>
+            Measured from slow-mo replay; leave blank to skip impact g-force.
+          </Text>
+          <View style={[s.row, { marginTop: theme.spacing.sm }]}>
+            <TextInput
+              style={[
+                s.input,
+                {
+                  borderColor: theme.colors.borderStrong,
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.sm,
+                  fontSize: theme.fontSize.md,
+                  width: 100,
+                },
+              ]}
+              value={contactTime}
+              onChangeText={setContactTime}
+              keyboardType="decimal-pad"
+              placeholder="0.05"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <Text style={[s.unit, { color: theme.colors.text, fontSize: theme.fontSize.md, marginLeft: theme.spacing.sm }]}>
+              seconds
+            </Text>
+          </View>
+
           <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.xl, marginTop: theme.spacing.xl }]}>
             Attempt {Math.min(attempts.length + 1, 3)} of 3
           </Text>
@@ -196,12 +308,13 @@ export default function ParachuteDrop() {
               <Text style={[s.h, { color: theme.colors.primary, fontSize: theme.fontSize.lg }]}>
                 Recorded attempts
               </Text>
-              {attempts.map((t, i) => (
+              {attempts.map((a, i) => (
                 <Text
                   key={i}
                   style={[s.p, { color: theme.colors.text, fontSize: theme.fontSize.md, marginTop: theme.spacing.xs }]}
                 >
-                  Drop {i + 1}: {t.toFixed(2)} s
+                  Drop {i + 1}: {a.duration.toFixed(2)} s
+                  {a.video_url ? ' · uploaded ✓' : ''}
                 </Text>
               ))}
             </View>
@@ -274,8 +387,10 @@ export default function ParachuteDrop() {
 
               <View style={[s.cards, { marginTop: theme.spacing.lg, gap: theme.spacing.sm }]}>
                 <MetricCard label="Impact velocity" value={velocity.toFixed(2)} unit="m/s" />
-                <MetricCard label="G-force" value={gForce.toFixed(2)} unit="g" />
                 <MetricCard label="Drag force" value={dragForce.toFixed(2)} unit="N" />
+                {impactGForce !== null ? (
+                  <MetricCard label="Impact g-force" value={impactGForce.toFixed(2)} unit="g" />
+                ) : null}
               </View>
 
               {!sentToLeaderboard ? (

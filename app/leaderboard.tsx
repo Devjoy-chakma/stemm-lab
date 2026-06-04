@@ -1,7 +1,17 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import {
+  collection,
+  limit as fbLimit,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
+import { ComponentProps, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,62 +19,135 @@ import {
 } from "react-native";
 
 import { getLeaderboard } from "../src/database/repositories/attemptRepository";
+import { db } from "../src/lib/firebase";
+import { haptic } from "../src/lib/haptics";
+import {
+  computeTeamTotals,
+  rankActivity,
+  RawLeaderboardEntry,
+} from "../src/lib/leaderboardAggregation";
+import { LEADERBOARD_COLLECTION } from "../src/lib/leaderboardSync";
 import { useTheme } from "../src/theme";
+
+type MciName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 const ACTIVITY_META: Record<
   string,
   {
-    icon: string;
+    icon: MciName;
     label: string;
   }
 > = {
-  parachute: {
-    icon: "🪂",
-    label: "Parachute Drop",
-  },
-
-  sound: {
-    icon: "🔊",
-    label: "Sound Pollution",
-  },
-
-  "hand-fan": {
-    icon: "🪭",
-    label: "Hand Fan",
-  },
-
-  "human-perf": {
-    icon: "🏃",
-    label: "Human Performance",
-  },
-
-  reaction: {
-    icon: "⚡",
-    label: "Reaction Board",
-  },
-
-  breathing: {
-    icon: "🫁",
-    label: "Breathing Pace",
-  },
+  parachute: { icon: "parachute", label: "Parachute Drop" },
+  sound: { icon: "volume-high", label: "Sound Pollution" },
+  "hand-fan": { icon: "weather-windy", label: "Hand Fan" },
+  "human-perf": { icon: "run", label: "Human Performance" },
+  reaction: { icon: "lightning-bolt", label: "Reaction Board" },
+  breathing: { icon: "lungs", label: "Breathing Pace" },
 };
+
+// Medal cards (ranks 1-3) have metallic backgrounds that stay the
+// same in both light and dark mode — so their text colours must be
+// fixed too, or dark-mode text inverts to cream and disappears
+// against the gold/silver/bronze.
+const MEDAL_TEXT_DARK = "#1D3557";   // primary navy — strong contrast on metals
+const MEDAL_TEXT_SUBTLE = "#1D2939"; // near-black for team name on gold (top spot)
+
+type TabKey =
+  | "overall"
+  | "parachute"
+  | "sound"
+  | "hand-fan"
+  | "human-perf"
+  | "reaction"
+  | "breathing";
+
+const TABS: { key: TabKey; label: string; icon: MciName }[] = [
+  { key: "overall", label: "Overall", icon: "trophy" },
+  { key: "parachute", label: "Parachute", icon: "parachute" },
+  { key: "sound", label: "Sound", icon: "volume-high" },
+  { key: "hand-fan", label: "Hand Fan", icon: "weather-windy" },
+  { key: "human-perf", label: "Human Perf", icon: "run" },
+  { key: "reaction", label: "Reaction", icon: "lightning-bolt" },
+  { key: "breathing", label: "Breathing", icon: "lungs" },
+];
 
 export default function Leaderboard() {
   const router = useRouter();
   const { theme } = useTheme();
 
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<RawLeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingOfflineFallback, setUsingOfflineFallback] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("overall");
 
-  useFocusEffect(
-    useCallback(() => {
-      loadLeaderboard();
-    }, [])
-  );
+  // Two derived views: Overall (sum-of-bests per team) or a single
+  // activity's per-team ranking. Recomputed only when rows or tab change.
+  const displayed = useMemo(() => {
+    if (activeTab === "overall") return computeTeamTotals(rows);
+    return rankActivity(rows, activeTab);
+  }, [rows, activeTab]);
+  const isOverall = activeTab === "overall";
 
-  const loadLeaderboard = async () => {
-    const data = await getLeaderboard();
-    setRows(data);
-  };
+  // Subscribe to Firestore (real-time). If the read fails (offline, no
+  // permissions, etc.), fall back to the locally-persisted SQLite
+  // leaderboard so the screen still shows something useful.
+  useEffect(() => {
+    let active = true;
+
+    const q = query(
+      collection(db, LEADERBOARD_COLLECTION),
+      orderBy("score", "desc"),
+      fbLimit(100)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!active) return;
+        const data: RawLeaderboardEntry[] = snap.docs.map((d) => {
+          const x = d.data() as any;
+          return {
+            discriminator: x.discriminator,
+            team_name: x.team_name,
+            activity_id: x.activity_id,
+            score: Number(x.score) || 0,
+          };
+        });
+        setRows(data);
+        setUsingOfflineFallback(false);
+        setLoading(false);
+      },
+      async (err) => {
+        console.warn("Firestore leaderboard read failed:", err);
+        if (!active) return;
+        try {
+          const localRows = (await getLeaderboard()) as any[];
+          if (!active) return;
+          // SQLite getLeaderboard returns one row per attempt and has no
+          // discriminator column — use team_name as the team key. Multiple
+          // attempts collapse to the best one inside the aggregation lib.
+          const mapped: RawLeaderboardEntry[] = localRows.map((r) => ({
+            discriminator: String(r.team_name),
+            team_name: String(r.team_name),
+            activity_id: String(r.activity_id),
+            score: Number(r.score) || 0,
+          }));
+          setRows(mapped);
+          setUsingOfflineFallback(true);
+        } catch (e) {
+          console.warn("SQLite leaderboard fallback also failed:", e);
+        } finally {
+          if (active) setLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, []);
 
   const getRankBadge = (index: number) => {
     if (index === 0) return "🥇";
@@ -135,12 +218,86 @@ export default function Leaderboard() {
             </Text>
           </View>
 
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            style={styles.headerBackButton}
+            onPress={() => router.push("/map")}
+            accessibilityLabel="Open map view"
+          >
+            <MaterialCommunityIcons
+              name="map-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* EMPTY */}
-      {rows.length === 0 ? (
+      {/* TABS */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScroll}
+        contentContainerStyle={styles.tabContent}
+      >
+        {TABS.map((tab) => {
+          const active = tab.key === activeTab;
+          const contentColor = active
+            ? theme.colors.textOnPrimary
+            : theme.colors.text;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              onPress={() => {
+                if (!active) haptic.selection();
+                setActiveTab(tab.key);
+              }}
+              style={[
+                styles.tab,
+                {
+                  backgroundColor: active
+                    ? theme.colors.primary
+                    : theme.colors.surface,
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radius.md,
+                },
+              ]}
+            >
+              <View style={styles.tabInner}>
+                <MaterialCommunityIcons
+                  name={tab.icon}
+                  size={16}
+                  color={contentColor}
+                />
+                <Text style={[styles.tabText, { color: contentColor }]}>
+                  {tab.label}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {usingOfflineFallback ? (
+        <View
+          style={[
+            styles.offlineBanner,
+            { backgroundColor: theme.colors.surfaceMuted },
+          ]}
+        >
+          <Text
+            style={[styles.offlineBannerText, { color: theme.colors.textMuted }]}
+          >
+            Offline — showing saved scores
+          </Text>
+        </View>
+      ) : null}
+
+      {/* LOADING / EMPTY / LIST */}
+      {loading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : displayed.length === 0 ? (
         <View style={styles.emptyState}>
           <Text
             style={[
@@ -161,17 +318,29 @@ export default function Leaderboard() {
               },
             ]}
           >
-            No completed attempts yet.
+            {isOverall
+              ? "No completed attempts yet."
+              : `No team has completed ${
+                  ACTIVITY_META[activeTab]?.label ?? activeTab
+                } yet.`}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={rows}
-          keyExtractor={(item) => String(item.attempt_id)}
+          data={displayed as any[]}
+          keyExtractor={(item) => String(item.discriminator)}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => {
             const isTopThree = index < 3;
+            // Both row shapes carry rank, discriminator, team_name.
+            // Overall has `total` + `activities_completed`; activity
+            // rankings have `score`.
+            const row = item as any;
+            const displayScore: number = row.total ?? row.score ?? 0;
+            const subInfo: string | null = isOverall
+              ? `${row.activities_completed ?? 0}/6 activities`
+              : null;
 
             return (
               <View
@@ -233,7 +402,7 @@ export default function Leaderboard() {
                         styles.rankText,
                         {
                           color: isTopThree
-                            ? theme.colors.textOnPrimary
+                            ? MEDAL_TEXT_DARK
                             : theme.colors.primary,
                         },
                       ]}
@@ -247,22 +416,26 @@ export default function Leaderboard() {
                       style={[
                         styles.score,
                         {
-                          color: theme.colors.primary,
+                          color: isTopThree
+                            ? MEDAL_TEXT_DARK
+                            : theme.colors.primary,
                         },
                       ]}
                     >
-                      {Math.round(item.score ?? 0)}
+                      {Math.round(displayScore)}
                     </Text>
 
                     <Text
                       style={[
                         styles.scoreLabel,
                         {
-                          color: theme.colors.primarySoft,
+                          color: isTopThree
+                            ? MEDAL_TEXT_DARK
+                            : theme.colors.primarySoft,
                         },
                       ]}
                     >
-                      SCORE
+                      {isOverall ? "TOTAL" : "SCORE"}
                     </Text>
                   </View>
                 </View>
@@ -274,10 +447,9 @@ export default function Leaderboard() {
                       style={[
                         styles.teamName,
                         {
-                          color:
-                            index === 0
-                              ? theme.colors.primary
-                              : theme.colors.text,
+                          color: isTopThree
+                            ? MEDAL_TEXT_SUBTLE
+                            : theme.colors.text,
                         },
                       ]}
                     >
@@ -285,20 +457,22 @@ export default function Leaderboard() {
                     </Text>
                   </View>
 
-                  <View style={styles.activitySection}>
-                    <Text
-                      style={[
-                        styles.activityText,
-                        {
-                          color: theme.colors.primary,
-                        },
-                      ]}
-                    >
-                      {ACTIVITY_META[item.activity_id]?.icon}{" "}
-                      {ACTIVITY_META[item.activity_id]?.label ??
-                        item.activity_id}
-                    </Text>
-                  </View>
+                  {subInfo ? (
+                    <View style={styles.activitySection}>
+                      <Text
+                        style={[
+                          styles.activityText,
+                          {
+                            color: isTopThree
+                              ? MEDAL_TEXT_DARK
+                              : theme.colors.primary,
+                          },
+                        ]}
+                      >
+                        {subInfo}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             );
@@ -380,6 +554,46 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 20,
     fontWeight: "700",
+  },
+
+  tabScroll: {
+    flexGrow: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
+  tabContent: {
+    gap: 8,
+    alignItems: "center",
+  },
+
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+
+  tabInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  tabText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  offlineBanner: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+
+  offlineBannerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 
   emptyState: {

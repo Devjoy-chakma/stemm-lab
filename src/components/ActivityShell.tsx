@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { useTheme } from '../theme';
+import { haptic } from '../lib/haptics';
 import { useSettingsStore } from '../stores';
 import type { ActivityShellProps, TabKey } from './ActivityShell.types';
 
@@ -113,7 +114,10 @@ export default function ActivityShell({
           return (
             <TouchableOpacity
               key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => {
+                if (!isActive) haptic.selection();
+                setActiveTab(tab.key);
+              }}
               style={[
                 styles.tab,
                 isActive && {
@@ -146,18 +150,6 @@ export default function ActivityShell({
       >
         {renderActiveTab()}
       </ScrollView>
-
-      {/* DEBUG FOOTER — temporary, remove later */}
-      <View
-        style={[
-          styles.debugFooter,
-          { backgroundColor: theme.colors.surfaceMuted, padding: theme.spacing.xs },
-        ]}
-      >
-        <Text style={[styles.debugText, { color: theme.colors.textMuted }]}>
-          {activity_id} · {activeTab}
-        </Text>
-      </View>
     </SafeAreaView>
   );
 }
@@ -195,6 +187,4 @@ const styles = StyleSheet.create({
   tabLabel: {},
   content: { flex: 1 },
   contentInner: { paddingBottom: 40 },
-  debugFooter: { alignItems: 'center' },
-  debugText: { fontSize: 11 },
 });

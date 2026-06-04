@@ -1,14 +1,18 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { ComponentProps } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../src/theme';
 
-const ACTIVITIES = [
-  { id: "parachute", name: "Parachute Drop", icon: "🪂" },
-  { id: "sound", name: "Sound Pollution", icon: "🔊" },
-  { id: "hand-fan", name: "Hand Fan", icon: "🪭" },
-  { id: "human-perf", name: "Human Performance", icon: "🏃" },
-  { id: "reaction", name: "Reaction Board", icon: "⚡" },
-  { id: "breathing", name: "Breathing Pace", icon: "🫁" },
+type MciName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+const ACTIVITIES: { id: string; name: string; icon: MciName }[] = [
+  { id: "parachute", name: "Parachute Drop", icon: "parachute" },
+  { id: "sound", name: "Sound Pollution", icon: "volume-high" },
+  { id: "hand-fan", name: "Hand Fan", icon: "weather-windy" },
+  { id: "human-perf", name: "Human Performance", icon: "run" },
+  { id: "reaction", name: "Reaction Board", icon: "lightning-bolt" },
+  { id: "breathing", name: "Breathing Pace", icon: "lungs" },
 ];
 
 export default function Home() {
@@ -69,7 +73,12 @@ export default function Home() {
             ]}
             onPress={() => router.push(`/activity/${a.id}`)}
           >
-            <Text style={styles.icon}>{a.icon}</Text>
+            <MaterialCommunityIcons
+              name={a.icon}
+              size={42}
+              color={theme.colors.primary}
+              style={styles.icon}
+            />
 
             <Text
               style={[
@@ -189,7 +198,6 @@ const styles = StyleSheet.create({
   },
 
   icon: {
-    fontSize: 36,
     marginBottom: 12,
   },
 

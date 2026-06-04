@@ -9,6 +9,9 @@ export interface Attempt {
   started_at: number;
   finished_at: number | null;
   score: number | null;
+  // GPS tagging — both null when permission denied or GPS unavailable.
+  gps_lat: number | null;
+  gps_lng: number | null;
   raw_data: Record<string, any>;
   write_up: string;
 }
@@ -21,6 +24,7 @@ interface AttemptStore {
   updateRawData: (data: Record<string, any>) => void;
   setScore: (score: number) => void;
   setWriteUp: (text: string) => void;
+  setLocation: (lat: number, lng: number) => void;
   finishAttempt: () => void;
   clearAttempt: () => void;
 
@@ -44,6 +48,8 @@ export const useAttemptStore = create<AttemptStore>((set, get) => ({
         started_at: Date.now(),
         finished_at: null,
         score: null,
+        gps_lat: null,
+        gps_lng: null,
         raw_data: {},
         write_up: '',
       },
@@ -69,6 +75,13 @@ export const useAttemptStore = create<AttemptStore>((set, get) => ({
   setWriteUp: (text) =>
     set((state) =>
       state.current ? { current: { ...state.current, write_up: text } } : state
+    ),
+
+  setLocation: (lat, lng) =>
+    set((state) =>
+      state.current
+        ? { current: { ...state.current, gps_lat: lat, gps_lng: lng } }
+        : state
     ),
 
   finishAttempt: () =>

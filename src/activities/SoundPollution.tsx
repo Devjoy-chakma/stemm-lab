@@ -19,7 +19,10 @@ import ActivityShell from '../components/ActivityShell';
 import MetricCard from '../components/MetricCard';
 import { useTheme } from '../theme';
 import { useAttemptStore, useTeamStore } from '../stores';
+import { haptic } from '../lib/haptics';
 import { sendToLeaderboard } from '../lib/leaderboardSync';
+import { getCurrentLocationOrNull } from '../lib/location';
+import { notifyActivityScored } from '../lib/notifications';
 import {
   calculateSoundPollutionResult,
   dbfsToNoiseLevel,
@@ -40,6 +43,7 @@ export default function SoundPollution() {
   const updateRawData = useAttemptStore((s) => s.updateRawData);
   const setScore = useAttemptStore((s) => s.setScore);
   const setWriteUp = useAttemptStore((s) => s.setWriteUp);
+  const setLocation = useAttemptStore((s) => s.setLocation);
   const finishAttempt = useAttemptStore((s) => s.finishAttempt);
   const getPreviousAttemptForActivity = useAttemptStore((s) => s.getPreviousAttemptForActivity);
 
@@ -85,6 +89,8 @@ useEffect(() => {
       setPermissionGranted(status.granted);
       const teamId = team?.team_id ?? 'demo-team';
       startAttempt(teamId, 'sound');
+      const loc = await getCurrentLocationOrNull();
+      if (loc) setLocation(loc.lat, loc.lng);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -181,6 +187,12 @@ try {
     setScore(result.pollution_score);
     finishAttempt();
     setSubmitted(true);
+    haptic.success();
+    notifyActivityScored(
+      team?.team_name ?? 'Your team',
+      'Sound Pollution',
+      result.pollution_score
+    );
   };
 
   const handleTryAgain = () => {
@@ -209,8 +221,10 @@ try {
     try {
       await sendToLeaderboard(current, team);
       setSentToLeaderboard(true);
+      haptic.success();
       Alert.alert('Sent!', 'Your score is on the leaderboard.');
     } catch (e: any) {
+      haptic.error();
       Alert.alert('Send failed', e.message ?? 'Unknown error');
     } finally {
       setSending(false);

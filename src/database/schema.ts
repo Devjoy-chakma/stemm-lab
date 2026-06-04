@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS activity_attempts (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   status TEXT NOT NULL,
+  gps_lat REAL,
+  gps_lng REAL,
   FOREIGN KEY(team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
   FOREIGN KEY(activity_id) REFERENCES activities(activity_id)
 );
@@ -113,5 +115,23 @@ CREATE TABLE IF NOT EXISTS app_settings (
 export const CREATE_META_TABLE = `
 CREATE TABLE IF NOT EXISTS _meta (
   schema_version INTEGER NOT NULL
+);
+`;
+
+// Queue of leaderboard sends that failed (e.g. offline or Firestore
+// unreachable). The background sync task drains this table when the
+// device next has connectivity.
+export const CREATE_PENDING_SYNC_TABLE = `
+CREATE TABLE IF NOT EXISTS pending_sync (
+  pending_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discriminator TEXT NOT NULL,
+  team_name TEXT NOT NULL,
+  activity_id TEXT NOT NULL,
+  score REAL NOT NULL,
+  grade_level INTEGER NOT NULL,
+  gps_lat REAL,
+  gps_lng REAL,
+  attempt_uid TEXT NOT NULL,
+  queued_at TEXT NOT NULL
 );
 `;
