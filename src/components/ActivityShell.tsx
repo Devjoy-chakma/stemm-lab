@@ -1,18 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import * as Speech from 'expo-speech';
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
   SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import * as Speech from 'expo-speech';
-import { useTheme } from '../theme';
 import { haptic } from '../lib/haptics';
 import { useSettingsStore } from '../stores';
+import { useTheme } from '../theme';
 import type { ActivityShellProps, TabKey } from './ActivityShell.types';
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -37,6 +37,7 @@ export default function ActivityShell({
   const tts_voice_id = useSettingsStore((s) => s.tts_voice_id);
 
   const [activeTab, setActiveTab] = useState<TabKey>('brief');
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // ---- Helpers ----
   const renderActiveTab = () => {
@@ -52,13 +53,26 @@ export default function ActivityShell({
     }
   };
 
-  const handleSpeakBrief = () => {
-    if (!briefSpeechText) return;
-    Speech.stop(); // stop any prior speech first
-    Speech.speak(briefSpeechText, {
-      rate: tts_rate,
-      voice: tts_voice_id ?? undefined,
-    });
+  const handleSpeakBrief = async () => {
+  if (!briefSpeechText) return;
+
+  const speaking = await Speech.isSpeakingAsync();
+
+  if (speaking) {
+    Speech.stop();
+    setIsSpeaking(false);
+    return;
+  }
+
+  setIsSpeaking(true);
+
+  Speech.speak(briefSpeechText, {
+    rate: tts_rate,
+    voice: tts_voice_id ?? undefined,
+    onDone: () => setIsSpeaking(false),
+    onStopped: () => setIsSpeaking(false),
+    onError: () => setIsSpeaking(false),
+  });
   };
 
   // ---- Render ----
